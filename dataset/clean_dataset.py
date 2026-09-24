@@ -6,7 +6,15 @@
 用法：
     python dataset/clean_dataset.py
 """
+import io
+import sys
+
 import pandas as pd
+
+from crawler_defamation import _extract_crime_label
+
+# Windows 主控台預設編碼（cp950）印不出判決書裡的罕見字元（如帶圈數字），改用 UTF-8 並容錯，避免整理途中崩潰。
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 RAW_PATH = 'defamation_judgments.csv'
 ML_READY_PATH = 'defamation_statements_ml_ready.csv'
@@ -40,12 +48,14 @@ def clean_dataset(raw_path=RAW_PATH):
   df = pd.concat([dedup_incident, dedup_fallback], ignore_index=True)
   after_dedup_count = len(df)
 
-  # 只有真的抓到逐則言論表格（編號非空）、且言論內容不是佔位字串/空值時，才算可用的一列一句 ML 資料。
+  # 只要言論內容不是佔位字串/空值、且案由有值，就算可用的 ML 資料
+  # （不強制要求有逐則表格編號——沒有表格但正則有抓到引號原文的整份判決摘要列也收錄）。
   usable_mask = (
-      df['編號'].notna()
-      & df['言論內容'].notna()
+      df['言論內容'].notna()
       & (df['言論內容'] != UNRESOLVED_PLACEHOLDER)
       & (df['言論內容'].str.len() > 0)
+      & df['案由'].notna()
+      & (df['案由'].str.len() > 0)
   )
 
   ml_ready = df[usable_mask].copy()
@@ -57,6 +67,12 @@ def clean_dataset(raw_path=RAW_PATH):
 
   # 社交平台大小寫不一致（ig/IG/fb/FB），統一成大寫，這是格式標準化，不是竄改內容。
   ml_ready['社交平台'] = ml_ready['社交平台'].str.upper()
+
+  # 沒有逐則表格的判決，涉犯罪名欄位是整段主文原文（夾雜被告姓名、刑度等雜訊）。
+  # 用爬蟲既有的 _extract_crime_label 規則收斂成乾淨標籤，跟新爬的資料用同一套邏輯，
+  # 這樣既有 CSV 不用重爬也能拿到跟新資料一致的罪名標籤。抓不到已知關鍵字的就保留原文，
+  # 不用猜測填入不確定的罪名。
+  ml_ready['涉犯罪名'] = ml_ready['涉犯罪名'].apply(_extract_crime_label)
 
   # 不可用的判決列，維持原欄位但拿掉逐則專屬欄位（本來就是空的，避免造成「有欄位但無意義」的誤導）。
   unresolved = unresolved.drop(columns=['編號', '日期', '時間', '社交平台', '平台帳號', '告證編號'])

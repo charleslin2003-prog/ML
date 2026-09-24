@@ -48,7 +48,7 @@ python dataset/clean_dataset.py
 輸出：
 
 - `dataset/defamation_statements_ml_ready.csv` — 有實際言論內容與案由的可用資料
-- `dataset/defamation_judgments.csv` — 沒有抓到可用言論、待日後補強解析的判決
+- `dataset/defamation_unresolved_judgments.csv` — 沒有抓到可用言論、待日後補強解析的判決
 
 ## 輸出欄位
 

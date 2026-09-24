@@ -50,6 +50,22 @@ python dataset/clean_dataset.py
 - `dataset/defamation_statements_ml_ready.csv` — 有實際言論內容與案由的可用資料
 - `dataset/defamation_unresolved_judgments.csv` — 沒有抓到可用言論、待日後補強解析的判決
 
+## 檔案說明
+
+| 檔案 | 說明 |
+|---|---|
+| `CLAUDE.md` | 給 Claude Code 的專案說明（環境設定、執行方式、架構、已知待辦事項）。面向 AI 協作者，內容跟這份 README 有重疊但不完全一樣。 |
+| `dataset/crawler_defamation.py` | 爬蟲主程式。`crawl_judgments()` 是單次查詢（受限於網站 500 筆上限，適合快速測試）；`crawl_exhaustive()` 會遞迴切分裁判日期區間繞過這個上限，並支援中斷續爬，是正式抓資料時用的版本。`extract_incident_table()` 優先解析判決書內附的逐則言論表格；解析不到表格時，退回用 `extract_statements_and_crimes()` 以正則從判決全文摘要言論與罪名。`_extract_crime_label()` 是罪名關鍵字標準化規則，`clean_dataset.py` 會直接複用同一份函式維持標籤一致。 |
+| `dataset/run_full_crawl.py` | 背景執行 `crawl_exhaustive()` 的進入點（`headless=True`），用於長時間背景爬取，不佔用前景終端機。 |
+| `dataset/clean_dataset.py` | 讀取 `defamation_judgments.csv`（不修改原始檔），去重、標準化欄位，拆分成「ML 可用」與「待解析」兩份輸出。 |
+| `dataset/defamation_judgments.csv` | 爬蟲的原始輸出（append 寫入，可能含重複列）。有逐則言論表格的判決會展開成多列（一則言論一列）；沒有表格的判決退回整份摘要（一份判決一列，欄位較少）。 |
+| `dataset/defamation_judgments.csv.progress.txt` | `crawl_exhaustive()` 的斷點續爬紀錄，記錄哪些裁判日期區間已經抓完；重新執行同一指令會自動跳過已完成的區間。 |
+| `dataset/defamation_statements_ml_ready.csv` | `clean_dataset.py` 的正式輸出：已去重、罪名標籤已標準化，且言論內容與案由都有值，可直接用於 ML 訓練。 |
+| `dataset/defamation_unresolved_judgments.csv` | `clean_dataset.py` 的另一份輸出：沒抓到可用言論內容或案由的列，留待補強解析規則（或改用 LLM 輔助抽取）後再重新歸類。 |
+| `dataset/crawl.log` | 執行爬蟲時的標準輸出紀錄（各判決的解析結果、略過的區間等），方便事後檢查爬取狀況。 |
+| `dataset/crawl_err.log` | 執行爬蟲時的標準錯誤輸出紀錄。 |
+| `dataset/__pycache__/` | Python 執行時自動產生的位元組碼快取，非原始碼，可忽略。 |
+
 ## 輸出欄位
 
 | 欄位 | 說明 |

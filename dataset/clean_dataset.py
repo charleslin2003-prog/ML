@@ -61,9 +61,28 @@ def clean_dataset(raw_path=RAW_PATH):
   ml_ready = df[usable_mask].copy()
   unresolved = df[~usable_mask].copy()
 
-  # 編號、告證編號在可用資料中不應有空值，可以安全轉成整數方便後續處理。
+  # 沒有逐則表格的判決，言論內容是把該判決正則抓到的所有引號原文用「 | 」接成一長串塞進同一列
+  # （見 crawler_defamation.py 的 extract_statements_and_crimes）。這裡把這種列展開成多列，
+  # 每列只放一句，才符合「一則言論一列」的目標；有逐則表格的列本來就已經是一列一句，不用展開。
+  SENTENCE_SEP = ' | '
+  has_table_id = ml_ready['編號'].notna()
+  single_sentence = ml_ready[has_table_id]
+  multi_sentence = ml_ready[~has_table_id].copy()
+  # 用 .apply(str.split) 而非 .str.split：pandas 的 .str.split 預設把分隔字串當正規表達式解析，
+  # ' | ' 裡的 '|' 會被誤判成正規表達式「或」運算子（變成依任何空白字元分割），
+  # 必須用原生字串的 literal split 才會照字面上的 ' | ' 三個字元切。
+  multi_sentence['言論內容'] = multi_sentence['言論內容'].apply(lambda s: s.split(SENTENCE_SEP))
+  multi_sentence = multi_sentence.explode('言論內容', ignore_index=True)
+  multi_sentence['言論內容'] = multi_sentence['言論內容'].str.strip()
+  multi_sentence = multi_sentence[multi_sentence['言論內容'].str.len() > 0]
+  ml_ready = pd.concat([single_sentence, multi_sentence], ignore_index=True)
+
+  # 編號、告證編號理論上是乾淨的數字，但少數判決書的表格儲存格裡混了註腳文字
+  # （例如「1\n（起訴書附表編號5）」），直接轉整數會炸掉，所以先只取開頭的數字部分再轉換。
   for col in ('編號', '告證編號'):
-    ml_ready[col] = ml_ready[col].astype('Int64')
+    ml_ready[col] = pd.to_numeric(
+        ml_ready[col].astype('string').str.extract(r'(\d+)', expand=False), errors='coerce'
+    ).astype('Int64')
 
   # 社交平台大小寫不一致（ig/IG/fb/FB），統一成大寫，這是格式標準化，不是竄改內容。
   ml_ready['社交平台'] = ml_ready['社交平台'].str.upper()
@@ -72,7 +91,7 @@ def clean_dataset(raw_path=RAW_PATH):
   # 用爬蟲既有的 _extract_crime_label 規則收斂成乾淨標籤，跟新爬的資料用同一套邏輯，
   # 這樣既有 CSV 不用重爬也能拿到跟新資料一致的罪名標籤。抓不到已知關鍵字的就保留原文，
   # 不用猜測填入不確定的罪名。
-  ml_ready['涉犯罪名'] = ml_ready['涉犯罪名'].apply(_extract_crime_label)
+  ml_ready['涉犯罪名'] = ml_ready['涉犯罪名'].fillna('').apply(_extract_crime_label)
 
   # 不可用的判決列，維持原欄位但拿掉逐則專屬欄位（本來就是空的，避免造成「有欄位但無意義」的誤導）。
   unresolved = unresolved.drop(columns=['編號', '日期', '時間', '社交平台', '平台帳號', '告證編號'])

@@ -102,9 +102,17 @@ in order:
    to have come from `extract_incident_table()` — a fallback-path row with real extracted quotes
    counts as usable too, it's just coarser (whole-judgment grain, missing 日期/時間/社交平台/平台
    帳號/告證編號).
-4. **`社交平台` casing** normalized to uppercase (`ig`/`IG`/`fb`/`FB` → `IG`/`FB`) — pure
+4. **Explode multi-quote fallback rows into one row per sentence** — `extract_statements_and_crimes()`
+   joins every quote it found in a judgment with `' | '` into a single `言論內容` cell. That violates
+   the one-statement-per-row goal, so rows without a table `編號` get `言論內容` split back out on the
+   literal string `' | '` and exploded into one row per quote (each inheriting the rest of the
+   judgment's columns). Table-path rows are already one row per incident and are left untouched.
+   Note: split with plain Python `str.split`, not pandas' `.str.split()` — the latter treats the
+   separator as a regex by default, and `|` is the alternation operator, so `.str.split(' | ')`
+   silently splits on every space in the text instead of the literal 3-character separator.
+5. **`社交平台` casing** normalized to uppercase (`ig`/`IG`/`fb`/`FB` → `IG`/`FB`) — pure
    presentation normalization, not a content change.
-5. **`涉犯罪名` re-normalization** — fallback-path rows carry the raw 主文 sentence (verdict text
+6. **`涉犯罪名` re-normalization** — fallback-path rows carry the raw 主文 sentence (verdict text
    with defendant names/sentencing, produced *before* `_extract_crime_label()` existed in the
    crawler, or from any judgment the crawler couldn't cleanly label). `clean_dataset.py` imports and
    re-applies the crawler's own `_extract_crime_label()` to the whole `涉犯罪名` column so that
@@ -113,7 +121,9 @@ in order:
    — see Known gaps below for what's still unresolved after this pass (mostly procedural
    dispositions like 上訴駁回/自訴不受理 that aren't crime names at all, and multi-defendant/
    multi-count judgments where only the first keyword match wins).
-6. `編號`/`告證編號` cast to nullable `Int64` (only ever populated on incident-table rows).
+7. `編號`/`告證編號` cast to nullable `Int64` (only ever populated on incident-table rows); some
+   table cells mix in footnote text (e.g. `"1\n（起訴書附表編號5）"`), so the leading digits are
+   extracted with a regex before the numeric cast rather than casting the raw cell directly.
 
 Genuinely missing values (日期/時間/社交平台/平台帳號/告證編號 on fallback-path rows) are left as
 empty — never filled or guessed, per this project's data-quality bar.

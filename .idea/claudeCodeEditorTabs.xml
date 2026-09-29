@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="617bc5db-c8c4-4d56-b0b9-2509e7905d3a" />
+    <option name="openSessionIds">
+      <list>
+        <option value="2307a10e-bbcb-4888-8f6f-2f4073abca99" />
+        <option value="390341d1-7d4b-4e3a-a3a3-3b1c9ec4e5b6" />
+        <option value="617bc5db-c8c4-4d56-b0b9-2509e7905d3a" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="2307a10e-bbcb-4888-8f6f-2f4073abca99" value="/sessions/d64e1090-8d63-466d-8038-5a5c499d52b8" />
+        <entry key="390341d1-7d4b-4e3a-a3a3-3b1c9ec4e5b6" value="/sessions/d941843d-35ef-4488-976a-98d512283101" />
+        <entry key="617bc5db-c8c4-4d56-b0b9-2509e7905d3a" value="/sessions/4d6d4912-8425-4ad2-8a8a-7c81992e3617" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="2307a10e-bbcb-4888-8f6f-2f4073abca99" value="整理爬出來的資料，不要動到原本的檔。 整理出可做ML的資料空值不要亂填 注意： 1.爬蟲會無止盡的爬" />
+        <entry key="390341d1-7d4b-4e3a-a3a3-3b1c9ec4e5b6" value="檢查是否推播到github了" />
+        <entry key="617bc5db-c8c4-4d56-b0b9-2509e7905d3a" value="ML_Work" />
+      </map>
+    </option>
+  </component>
+</project>

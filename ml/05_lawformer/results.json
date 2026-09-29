@@ -1,0 +1,60 @@
+{
+  "model_id": "thunlp/Lawformer",
+  "max_length": 512,
+  "epochs": 3,
+  "batch_size": 8,
+  "learning_rate": 2e-05,
+  "test_accuracy": 0.3709761163032191,
+  "test_macro_f1": 0.23476041636880085,
+  "test_weighted_f1": 0.32114077082904474,
+  "per_class_f1": {
+    "公然侮辱": 0.5243243243243243,
+    "加重誹謗": 0.2001725625539258,
+    "散布文字誹謗": 0.10294117647058823,
+    "誹謗": 0.0,
+    "無罪": 0.346364018495166
+  },
+  "confusion_matrix": [
+    [
+      873,
+      65,
+      23,
+      0,
+      307
+    ],
+    [
+      329,
+      116,
+      39,
+      0,
+      328
+    ],
+    [
+      178,
+      61,
+      28,
+      0,
+      156
+    ],
+    [
+      138,
+      29,
+      6,
+      0,
+      119
+    ],
+    [
+      544,
+      76,
+      25,
+      0,
+      412
+    ]
+  ],
+  "num_parameters": 126371075,
+  "peak_gpu_memory_allocated_mb": null,
+  "peak_gpu_memory_reserved_mb": null,
+  "train_runtime_seconds": null,
+  "total_wall_clock_seconds": 12179.0,
+  "timing_note": "回推值：01~05 訓練時 common.py 尚未加入計時，改用佇列腳本自己印出的 START/DONE 時間戳回推（檔案 mtime 在這台機器上會被背景程式整批重寫，不可靠）。GPU 記憶體無法回推，06~10 用相同模型/超參數實測，可作為代表值。"
+}

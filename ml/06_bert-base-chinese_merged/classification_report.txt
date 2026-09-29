@@ -1,0 +1,17 @@
+google-bert/bert-base-chinese
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.5493    0.5465    0.5479      1367
+         誹謗類     0.5891    0.6213    0.6048      1698
+          無罪     0.4119    0.3835    0.3972      1249
+
+    accuracy                         0.5287      4314
+   macro avg     0.5167    0.5171    0.5166      4314
+weighted avg     0.5251    0.5287    0.5266      4314
+
+
+confusion matrix (列=真實, 行=預測)
+[[ 747  322  298]
+ [ 257 1055  386]
+ [ 356  414  479]]

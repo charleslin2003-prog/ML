@@ -5,33 +5,33 @@
   "batch_size": 32,
   "learning_rate": 2e-05,
   "num_parameters": 102269955,
-  "total_wall_clock_seconds": 408.0,
-  "train_runtime_seconds": 396.4,
+  "total_wall_clock_seconds": 387.9,
+  "train_runtime_seconds": 376.6,
   "peak_gpu_memory_allocated_mb": 4625.0,
   "peak_gpu_memory_reserved_mb": 6014.0,
-  "test_accuracy": 0.528743625405656,
-  "test_macro_f1": 0.5165977861972574,
-  "test_weighted_f1": 0.5266284252143487,
+  "test_accuracy": 0.5315252665739453,
+  "test_macro_f1": 0.5183737282745197,
+  "test_weighted_f1": 0.5292333657609546,
   "per_class_f1": {
-    "公然侮辱": 0.5478547854785478,
-    "誹謗類": 0.6047578102608198,
-    "無罪": 0.39718076285240467
+    "公然侮辱": 0.54477050413845,
+    "誹謗類": 0.6157760814249363,
+    "無罪": 0.39457459926017263
   },
   "confusion_matrix": [
     [
-      747,
-      322,
-      298
+      724,
+      315,
+      328
     ],
     [
-      257,
-      1055,
-      386
+      233,
+      1089,
+      376
     ],
     [
-      356,
-      414,
-      479
+      334,
+      435,
+      480
     ]
   ]
 }

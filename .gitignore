@@ -5,3 +5,7 @@ ml/*/checkpoints/
 ml/exp3_accuracy/runs/*/checkpoints/
 ml/_backup_original/
 ml/exp3_accuracy/data_*/
+手機應用/web/vendor/*.wasm
+手機應用/scripts/*_js_out.json
+node_modules/
+package-lock.json

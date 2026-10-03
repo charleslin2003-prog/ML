@@ -1,0 +1,34 @@
+{
+  "model_name": "defamation_electra_small",
+  "labels": [
+    "公然侮辱",
+    "誹謗類"
+  ],
+  "max_length": 256,
+  "vocab_size": 21128,
+  "num_parameters": 24561410,
+  "size_fp32_mb": 94.2,
+  "size_int8_mb": 24.55,
+  "do_lower_case": true,
+  "n_test": 3065,
+  "accuracy": 0.7409461663947797,
+  "macro_f1": 0.7313594990343288,
+  "verification": {
+    "stages": {
+      "PyTorch (fp32)": {
+        "accuracy": 0.7419249592169658,
+        "macro_f1": 0.7310618830055435
+      },
+      "ONNX (fp32)": {
+        "accuracy": 0.7419249592169658,
+        "macro_f1": 0.7310618830055435
+      },
+      "ONNX (INT8量化)": {
+        "accuracy": 0.7409461663947797,
+        "macro_f1": 0.7313594990343288
+      }
+    },
+    "int8_vs_pytorch_agreement": 0.967699836867863
+  },
+  "compression_ratio": 3.84
+}

@@ -1,0 +1,159 @@
+{
+  "runs": {
+    "B6_bin_electra": {
+      "model_id": "hfl/chinese-legal-electra-base-discriminator",
+      "n_train": 16263,
+      "accuracy": 0.7543230016313214,
+      "macro_f1": 0.7460254735477796,
+      "wall_min": 44.57666666666667
+    },
+    "B3_bin_source": {
+      "model_id": "hfl/chinese-roberta-wwm-ext",
+      "n_train": 16263,
+      "accuracy": 0.7507340946166394,
+      "macro_f1": 0.7482079523646082,
+      "wall_min": 29.896666666666665
+    },
+    "M1_electra_small": {
+      "model_id": "hfl/chinese-electra-180g-small-ex-discriminator",
+      "n_train": 16263,
+      "accuracy": 0.7419249592169658,
+      "macro_f1": 0.7310618830055435,
+      "wall_min": 4.989999999999999
+    },
+    "M2_rbt3": {
+      "model_id": "hfl/rbt3",
+      "n_train": 16263,
+      "accuracy": 0.7252854812398042,
+      "macro_f1": 0.715833214413443,
+      "wall_min": 1.77
+    },
+    "M3_rbt6": {
+      "model_id": "hfl/rbt6",
+      "n_train": 16263,
+      "accuracy": 0.7432300163132137,
+      "macro_f1": 0.7330689203409106,
+      "wall_min": 2.953333333333333
+    },
+    "J0_judgment": {
+      "model_id": "hfl/chinese-roberta-wwm-ext",
+      "n_train": 6079,
+      "accuracy": 0.8489702517162472,
+      "macro_f1": 0.8482551073557498,
+      "wall_min": 12.538333333333332
+    },
+    "J1_bertwwm": {
+      "model_id": "hfl/chinese-bert-wwm",
+      "n_train": 6079,
+      "accuracy": 0.8260869565217391,
+      "macro_f1": 0.8260787599497277,
+      "wall_min": 8.473333333333333
+    },
+    "J2_electra": {
+      "model_id": "hfl/chinese-legal-electra-base-discriminator",
+      "n_train": 6079,
+      "accuracy": 0.8421052631578947,
+      "macro_f1": 0.8415443552836941,
+      "wall_min": 8.885
+    },
+    "E0_baseline": {
+      "model_id": "hfl/chinese-roberta-wwm-ext",
+      "n_train": 18590,
+      "accuracy": 0.5419564209550302,
+      "macro_f1": 0.5231825708767555,
+      "wall_min": 9.381666666666666
+    },
+    "E5_weighted_6ep": {
+      "model_id": "hfl/chinese-roberta-wwm-ext",
+      "n_train": 18106,
+      "accuracy": 0.5540101993509504,
+      "macro_f1": 0.540937775847523,
+      "wall_min": 6.841666666666667
+    }
+  },
+  "model_meta": {
+    "model_name": "defamation_electra_small",
+    "labels": [
+      "公然侮辱",
+      "誹謗類"
+    ],
+    "max_length": 256,
+    "vocab_size": 21128,
+    "num_parameters": 24561410,
+    "size_fp32_mb": 94.2,
+    "size_int8_mb": 24.55,
+    "do_lower_case": true,
+    "n_test": 3065,
+    "accuracy": 0.7409461663947797,
+    "macro_f1": 0.7313594990343288,
+    "verification": {
+      "stages": {
+        "PyTorch (fp32)": {
+          "accuracy": 0.7419249592169658,
+          "macro_f1": 0.7310618830055435
+        },
+        "ONNX (fp32)": {
+          "accuracy": 0.7419249592169658,
+          "macro_f1": 0.7310618830055435
+        },
+        "ONNX (INT8量化)": {
+          "accuracy": 0.7409461663947797,
+          "macro_f1": 0.7313594990343288
+        }
+      },
+      "int8_vs_pytorch_agreement": 0.967699836867863
+    },
+    "compression_ratio": 3.84
+  },
+  "ensemble_sentence": {
+    "n_members": 4,
+    "accuracy": 0.7615008156606852,
+    "macro_f1": 0.7584222517871297,
+    "threshold": 0.5200000000000002,
+    "accuracy_tuned": 0.7582381729200652,
+    "macro_f1_tuned": 0.7557719288454335
+  },
+  "ensemble_judgment": {
+    "n_members": 3,
+    "accuracy": 0.8558352402745996,
+    "macro_f1": 0.8553990955549837,
+    "threshold": 0.5900000000000003,
+    "accuracy_tuned": 0.8501144164759725,
+    "macro_f1_tuned": 0.8492283907941537
+  },
+  "browser_test": {
+    "results": [
+      {
+        "text": "你這個智障，廢物一個",
+        "label": "公然侮辱",
+        "conf": "模型信心 98.2%",
+        "badges": [
+          "12 tokens",
+          "132 ms",
+          "裝置端運算"
+        ]
+      },
+      {
+        "text": "他把公司的錢偷偷匯到自己帳戶",
+        "label": "誹謗類",
+        "conf": "模型信心 95.7%",
+        "badges": [
+          "16 tokens",
+          "81 ms",
+          "裝置端運算"
+        ]
+      },
+      {
+        "text": "這個醫生根本沒有執照，是密醫",
+        "label": "誹謗類",
+        "conf": "模型信心 97.3%",
+        "badges": [
+          "16 tokens",
+          "81 ms",
+          "裝置端運算"
+        ]
+      }
+    ],
+    "errors": []
+  }
+}

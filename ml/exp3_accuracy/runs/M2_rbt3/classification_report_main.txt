@@ -1,0 +1,11 @@
+M2_rbt3 / hfl/rbt3 / main (3065 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.7305    0.6086    0.6640      1367
+         誹謗類     0.7222    0.8192    0.7677      1698
+
+    accuracy                         0.7253      3065
+   macro avg     0.7263    0.7139    0.7158      3065
+weighted avg     0.7259    0.7253    0.7214      3065
+

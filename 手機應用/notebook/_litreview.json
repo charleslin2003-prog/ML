@@ -1,0 +1,1026 @@
+{
+  "topicSummaries": [
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "summary": "LJP 是法律 NLP 最活躍的子領域，中文資源以中國大陸的 CAIL 系列為核心：CAIL2018（2,676,075 件刑案、183 條法條、202 罪名）、LeCaRD/LeCaRDv2（類案檢索）、CAIL-Long（Lawformer 隨附）。中文法律預訓練模型主要是 THUNLP 的 Lawformer（以 2,280 萬份中國裁判文書、84GB 續訓 RoBERTa-wwm-ext，序列長 4096）與 HFL 的 legal-ELECTRA 系列（語料僅描述為「大規模法律文書」，未公開規模）—— 全部是簡體中文、大陸法源。\n\n最關鍵的是：本專案發現的「標籤粒度錯配」問題在文獻中已有明確且嚴厲的討論。Medvedeva & Mcbride（NLLP 2023）審查 171 篇 LJP 論文，只有 12 篇（7%）使用了「適當的資料」；他們原文直指多數研究「把判決書裡的事實當成對應某個判決結果（即標籤），而真正的判決結果就在同一份判決書裡」。另有 Tippett et al.（2021，經其引用）指出判決書的事實段是「由決定者本人撰寫、為與結論一致而高度篩選的摘要」。An et al.（Findings of EMNLP 2022）則證明高準確率的罪名預測模型並未學到法理（違反「無罪推定」與敏感性原則）。\n\n台灣本地研究稀少但存在：Peng & Lei（PeerJ CS 2024）用 218,120 份地院判決做罪名預測，其中「誹謗」3,884 件，BERT 準確率 97.53%—98.95%——這個近乎完美的數字本身就是洩漏的徵兆，恰可作為本專案的反面對照。TW-LegalBench（ICAIL 2026）是目前最新的繁中法律 benchmark，自己也承認 LJP 的洩漏「不可避免」。公開繁中判決語料幾乎沒有，但司法院資料開放平臺有官方 API。",
+      "n": 19
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "summary": "四個子題都找到可查證的主要來源。(1) HFL 系列的改良點與數字已從 MacBERT 論文（arXiv:2004.13922）原始表格取得：在飽和的單句分類任務上整個家族只差 1 分內（ChnSentiCorp 94.5~95.9），但在語意較難的句對任務差距擴大到 3.5 分（XNLI 77.8→81.3）——這支持「backbone 選擇不是本專案主要增益來源」的敘述。另外一個重要更正：HFL 官方 FAQ 明確說 RoBERTa-wwm-ext 並非真的 RoBERTa，只取消 NSP、沒有 dynamic masking，必須用 BertTokenizer 載入，報告不應寫成 RoBERTa。(2) 「損失函數對齊評估指標」有明確的 NLP 文獻依據：Dice Loss（ACL 2020）摘要直接寫 cross-entropy 是 accuracy-oriented、與測試時的 F1 不一致；理論面可引 Ye et al. ICML 2012 與 Narasimhan ICML 2015（F-measure 不可分解）。Henning et al. EACL 2023 綜述則說重採樣／改損失通常只有「small to moderate gains」——這正好為 +0.018 macro-F1 定性。(3) 「標籤粒度不匹配」在文獻上的正式名稱是周志華的 inexact supervision，技術框架是 multiple instance learning；最貼近本專案的已發表工作是 Angelidis & Lapata TACL 2018（只有文件級標籤卻預測句級情感）。(4) 關鍵對照數字：ToxiCN（ACL 2023）在中文「毒性子類型判別」上 RoBERTa 只有 77.3~77.7 F1，OffensEval sub-task B（攻擊類型）最佳 0.755——本專案 76% 與結構相同任務的中英文最佳水準幾乎一致。",
+      "n": 30
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "summary": "官方文件可查證度高，結論相當明確。(1) ONNX Runtime Web 現在實質只有兩條路：WASM/CPU（支援全部 ONNX 運算子）與 WebGPU（只支援子集，官方 op 清單共 109 個）；WebGL 官方已標示「maintenance mode」，WebNN 只在 Windows 的 Chrome/Edge。(2) 關鍵衝突：ORT 官方建議 transformer 用「動態量化」，但 WebGPU op 清單裡沒有 MatMulInteger / DynamicQuantizeLinear — 動態 INT8 的 BERT 在 WebGPU 上矩陣乘法會退回 CPU。想用 WebGPU 就該走 fp16 或 q4(MatMulNBits)；想用 INT8 就老實跑 WASM。(3) 量化壓縮比我用 HF API 實測：Xenova/bert-base-chinese ONNX fp32 390.5 MiB → int8 98.3 MiB（3.97×），fp16 2.0×，q4f16 5.0×。精度損失有 Intel Neural Compressor 官方驗證表佐證，BERT 系列 GLUE 分類任務 INT8 多在 ±1% 內。(4) 中文小模型：hfl/rbt3 是 3 層、約 38M 參數、149 MiB（注意：是「繼續預訓練」不是蒸餾）；rbt6 6 層 230 MiB；chinese-electra-small 12 層 hidden 256、12M 參數、47 MiB。但官方 benchmark 顯示 RBT3 在 XNLI 比 RoBERTa-wwm-ext 低 6.5 分。(5) 實務天花板：WASM 4GB 定址上限、COOP/COEP 才能開多執行緒、Safari 對 7 天無互動的 origin 會主動清快取。本專案 4 模型集成每個 390 MiB，即使 INT8 仍約 393 MiB，手機端不可行 — 必須改單模型或蒸餾。",
+      "n": 29
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "summary": "以官方文件查證後，PWA 是本專案最合理的手機部署路徑：Service Worker（W3C Candidate Recommendation Draft）+ Web App Manifest（仍是 Working Draft，官方自承「不穩定」）+ Cache API 已足夠做到離線推論，更新不必經商店審查。最關鍵的風險在 iOS：Safari 沒有 beforeinstallprompt，只能靠分享選單手動「加入主畫面」；而 WebKit ITP 明文會在使用者 7 天未互動後刪除網站全部 script-writable 儲存，「Service Worker registrations and cache」在清單內——意即在 Safari 分頁裡用的 PWA，幾十 MB 的模型會被反覆重抓；只有「已加入主畫面」的 web app 被明文豁免。因此 UI 必須主動引導 iOS 使用者安裝。容量不是瓶頸（Chrome 可達磁碟 60%、Safari 瀏覽器/主畫面 web app 約 60%）。原生 App／RN／Flutter 的額外成本主要在散佈：Apple 99 USD/年＋審查、Google Play 25 USD＋新個人帳號須 12 名測試者連續 14 天；且審查指引 4.2 明文排斥「repackaged website」。手機擴充套件路線不可行（iOS 擴充仍須包在 App 內過審、Kiwi 已停更）。另查到現有 sw.js 有一個會讓離線失效的實作瑕疵（opaque response）。",
+      "n": 34
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "summary": "最關鍵的發現對本專案的核心賣點不利。113年憲判字第3號（2024-04-26）確立公然侮辱罪僅在「依個案表意脈絡、逾越一般人可合理忍受範圍、並經個案權衡」之限縮範圍內合憲；112年憲判字第8號（2023-06-09）則要求誹謗須審查表意人發言前是否「經合理查證」。兩要件都依賴句子以外的資訊（脈絡、雙方關係、挑釁、公共利益價值、事前查證行為），模型只看一句留言在原理上無法複製此法律判準。又113年憲判字第5號已令侮辱職務罪失效，行政院2026-01-29另通過網路／深偽加重處罰草案——2024年前判決的標籤已部分非現行法，存在標籤漂移。資料偏誤可定名為 sample selection bias（Heckman 1979）加訴訟案件選擇效應（Priest & Klein 1984）；無負樣本屬 PU learning，類別先驗不可識別。台灣2014–16妨害名譽起訴率僅約20%，模型學到的其實是 P(罪名|文本,已起訴且判決)。法規面：EU AI Act 附件三第8點僅及於司法機關使用之系統，本App不屬高風險；但台灣AI基本法第5條對高風險認定者課警語義務，消保法第22條使「76%準確率」宣稱產生拘束力。",
+      "n": 28
+    }
+  ],
+  "verified": [
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "CAIL2018 是第一個大規模中文 LJP 資料集，含 2,676,075 件中國最高人民法院公布的刑事案件，標註 183 條刑法法條與 202 個罪名，三個子任務為「法條預測／罪名預測／刑期預測」，輸入是案件的事實描述（fact description）。標籤分布極度不均：前 10 個罪名涵蓋 79.0% 的案件，後 10 個罪名只涵蓋 0.12%。訓練/測試切分為 1,710,856 / 965,219。",
+      "source": "Xiao, Zhong, Guo, Tu, Liu, Sun, Feng, Han, Hu, Wang, Xu (2018). CAIL2018: A Large-Scale Legal Dataset for Judgment Prediction. arXiv:1807.02478",
+      "url": "https://arxiv.org/abs/1807.02478",
+      "relevance": "本專案的任務設定（從文字預測罪名）與 CAIL 的 charge prediction 子任務同型，可直接引用為「研究傳統」依據。更重要的是類別不均的問題在最大規模資料集上同樣存在（79% vs 0.12%），這佐證了 CLAUDE.md「Known gaps」裡提到的公然侮辱壓倒加重誹謗的失衡並非本專案的資料收集缺陷，而是 LJP 領域的結構性現象，報告中可用這個數字做對照。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "Medvedeva & Mcbride 審查了 2014–2023 年間 171 篇 LJP 論文，只找到 12 篇（7%）使用「適合做預測的資料」，其中只有 7 篇用文字輸入。論文原文明確指出：「most of the papers use NLP to output a classification in response to a textual account of facts extracted from an existing judgment. They classify facts in a judgment as associated with a specific verdict (i.e. a label), but the actual verdict can be found in the same judgment.」並指出「while the text of a judgment is not appropriate data for making predictions for that judgment, it can be hard for researchers to find good data for LJP」。使用適當資料的論文表現明顯較差：文字輸入類中只有一篇準確率超過 70%。",
+      "source": "Masha Medvedeva, Pauline Mcbride (2023). Legal Judgment Prediction: If You Are Going to Do It, Do It Right. Proceedings of the Natural Legal Language Processing Workshop 2023 (NLLP), Singapore. ACL Anthology 2023.nllp-1.9（引文已從 PDF 原文逐字核對）",
+      "url": "https://aclanthology.org/2023.nllp-1.9/",
+      "relevance": "這是整份技術報告最該引用的一篇。本專案發現的「標籤來自判決結果而非事實／標籤粒度錯配」，在這裡有一字不差的學術對應描述。它也給了一個關鍵的量化基準：真正做對的研究只有 7%，且其文字輸入模型準確率幾乎都低於 70%。本專案句子層級 76%、判決層級 86% 的成績放在這個尺度裡是合理且誠實的，不需要為「不夠高」辯解——反而該用這篇說明為什麼 98% 那種數字才是可疑的。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "判決書中的「事實」段落並非中立的案情紀錄，而是「highly selective summaries of the original case record, written by the decision-makers themselves and tailored for consistency with the decision」（由決定者本人撰寫、為與結論保持一致而高度篩選的摘要）。因此判決書裡的事實在實質與形式上都可能與判決前的各方陳述大不相同。",
+      "source": "Tippett et al. (2021)，此語句由 Medvedeva & Mcbride (2023) NLLP 論文第 3 節逐字引用（本次核對的是 NLLP 論文原文中的引號內容，未直接取得 Tippett 原文）",
+      "url": "https://aclanthology.org/2023.nllp-1.9/",
+      "relevance": "直接解釋了本專案「判決層級 86% > 句子層級 76%」的原因：判決書的事實敘述已經被法官寫成「指向這個罪名」的版本，模型在判決層級讀到的是帶有結論痕跡的文字。引用這句可以把本專案的準確率差距從「模型不夠好」重新詮釋為「兩種粒度的資料洩漏程度不同」，這是方法論上的誠實交代。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "Medvedeva, Wieling, Vols (2023) 主張研究者應避免使用「prediction」一詞，並區分三種不同任務：outcome identification（結果辨識）、outcome-based judgement categorisation（基於結果的判決分類）、outcome forecasting（結果預測）。只有第三種才是法律從業者理解的「預測」。",
+      "source": "Medvedeva, M., Wieling, M. & Vols, M. (2023). Rethinking the field of automatic prediction of court decisions. Artificial Intelligence and Law, 31(1):195–212",
+      "url": "https://research.rug.nl/en/publications/rethinking-the-field-of-automatic-prediction-of-court-decisions/",
+      "relevance": "提供了本專案該如何自我定位的正式術語。本專案是從已公布判決書抽出言論、用判決結果當標籤，嚴格說屬於「outcome-based judgement categorisation」而非 forecasting。技術報告與 PWA 的 UI 文案都應該用這個區分來描述系統能力（「這則言論在過去判決中與某罪名相關」而不是「法院會判你有罪」），這同時是學術誠實也是降低法律責任風險。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "Medvedeva, Vols, Wieling (2020) 在歐洲人權法院（ECtHR）資料上達到平均 75% 準確率（9 個條文），但當改成「用過去案件預測未來案件」的時序切分時，平均準確率掉到 58–68%。該論文後續版本（Medvedeva et al. 2021）在較小但資料適當的集合上只有 65–68%。",
+      "source": "Medvedeva, M., Vols, M., Wieling, M. (2020). Using machine learning to predict decisions of the European Court of Human Rights. Artificial Intelligence and Law, 28(2):237–266. DOI 10.1007/s10506-019-09255-y（Crossref 核對）",
+      "url": "https://doi.org/10.1007/s10506-019-09255-y",
+      "relevance": "給出「隨機切分 vs 時序切分」會造成多大落差的實測數字（75% → 58–68%，約 10–17 個百分點）。本專案若目前用的是隨機切分，技術報告應該明確揭露這點，並考慮補一次按裁判日期切分的實驗；可直接引用這個落差幅度作為預期。這在本專案尤其重要，因為繁中判決有 2024 年憲判字第 3 號這個時間斷點（見下一條）。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "即使罪名預測模型在 benchmark 上準確率超過 80%，也不代表它學到了法理。An et al. 提出三個可信度原則（sensitivity、selectivity、presumption of innocence），並以中國大陸適用的「四要件理論」為評估框架；結果顯示現有模型雖然滿足 selectivity，但多數「敏感性不足、且不滿足無罪推定」。",
+      "source": "Zhenwei An, Quzhe Huang, Cong Jiang, Yansong Feng, Dongyan Zhao (2022). Do Charge Prediction Models Learn Legal Theory? Findings of EMNLP 2022. arXiv:2210.17108",
+      "url": "https://arxiv.org/abs/2210.17108",
+      "relevance": "為本專案提供一套可照抄的「超越 accuracy」評估方法：做反事實擾動（例如把言論中的貶損詞替換掉、把公開性要件移除）看模型預測是否隨之改變。公然侮辱 vs 誹謗的區別本質上就是構成要件差異（是否涉及具體事實指摘），正好適合這種要件層級的敏感性測試，而且這種測試不需要新標註資料，是低成本高說服力的補充實驗。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "台灣已有一篇同儕審查的 BERT 罪名預測研究：收集司法院 218,120 份地方法院判決，分 10 個罪名類別（公共危險 88,634、竊盜 42,804、過失傷害 29,905、詐欺 24,105、傷害 15,143、偽造文書 5,254、賭博 4,103、誹謗 3,884、過失致死 2,710、妨害性自主 1,578）。罪名預測準確率：原始 BERT 97.53%、two-chunking BERT 98.5%、three-chunking BERT 98.95%、XLNet 98.16%。刑期預測則只有傷害 72.37%、公共危險 80.93%。資料集公開於 figshare（DOI 10.6084/m9.figshare.24647532）。論文原文寫道：「Unfortunately, in Taiwan, there is no relevant legal dataset and no public legal training model available.」",
+      "source": "Yi-Ting Peng, Chin-Laung Lei (2024). Using Bidirectional Encoder Representations from Transformers (BERT) to predict criminal charges and sentences from Taiwanese court judgments. PeerJ Computer Science. DOI 10.7717/peerj-cs.1841",
+      "url": "https://doi.org/10.7717/peerj-cs.1841",
+      "relevance": "這是本專案最直接的台灣先行研究，而且它的「誹謗」類別（3,884 件）與本專案主題重疊。它的 98.95% 準確率是絕佳的反面教材：輸入是整份判決全文（含主文），所以模型幾乎只是在讀答案——正是 Medvedeva & Mcbride 批評的那種設定。本專案應在報告中做明確對比：「我們刻意把粒度降到句子層級、把主文排除在輸入之外，因此準確率 76% 遠低於既有文獻的 98%，但這 76% 才是有意義的數字。」這一段比較本身就是本專案最大的學術貢獻點。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "TW-LegalBench 是目前最新的繁體中文（台灣華語）法律 benchmark，含 16,000+ 選擇題、117 題申論題、以及 14,000+ LJP 實例。其 LJP 部分取自 2013–2024 年第一審刑事判決，只保留具備「主文／事實／理由」清楚結構的判決（因此排除簡易判決），分層抽樣得 14,325 份、涵蓋超過 700 種罪名，再取其中案件數 ≥10 的 107 種罪名、每種抽 5 份作測試集，最終 13,790 訓練 / 535 測試。資料來源為司法院資料開放平臺。論文在 Limitations 明確承認：「data leakage remains an unavoidable concern for LJP, as judgment data has long been considered a valuable open-source dataset in Traditional Chinese and Taiwanese culture」。",
+      "source": "Fei-Yueh Chen, Chun Huang Lin, Chan Wei Hsu, Kuan Hsuan Yeh, Zih-Ching Chen, Kuan-Ming Chen, Patrick Chung-Chia Huang (2026). TW-LegalBench: Measuring Taiwanese Legal Understanding. ICAIL 2026（21st International Conference on AI and Law, Singapore）, DOI 10.1145/3836937.3836950; arXiv:2606.18699",
+      "url": "https://arxiv.org/abs/2606.18699",
+      "relevance": "本專案在「繁中 LJP」這條線上並非孤立，報告的 related work 一定要有這篇。其「只保留主文/事實/理由三段俱全的判決」的篩選策略，可以用來強化本專案 extract_statements_and_crimes() 的正則切段做法；其「只用 ≥10 件的 107 種罪名」則是處理長尾的具體前例。另外它承認 LJP 洩漏不可避免，而本專案在句子層級做標註正是對這個問題的一種回應——可以把本專案定位為 TW-LegalBench 的細粒度補充。注意：論文 PDF 中我沒有找到 HuggingFace／GitHub 的實際連結，資料是否已公開釋出需再確認。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "Lawformer 是基於 Longformer 架構的中文法律長文件預訓練模型，從 RoBERTa-wwm-ext checkpoint 續訓，最大序列長度 4,096 tokens。預訓練語料取自「中國裁判文書網」，含 5,428,717 份刑事判決（平均 962.84 tokens）與 17,387,874 份民事判決（平均 1,353.03 tokens），總計 84GB（刑事 17GB + 民事 67GB）。同時釋出 CAIL-Long 資料集（刑事 1,129,053 件、平均 916.57 tokens；民事 1,099,605 件、平均 1,286.88 tokens）。報告結果：刑事罪名預測 micro-F1 95.4%、法條預測 82.0%；LeCaRD 類案檢索 57.36 MAP；CJRC 閱讀理解 56.62 F1；JEC-QA 問答 45.81%。Checkpoint 在 HuggingFace（thunlp/Lawformer，亦有 xcjthu/Lawformer）。",
+      "source": "Chaojun Xiao, Xueyu Hu, Zhiyuan Liu, Cunchao Tu, Maosong Sun (2021). Lawformer: A Pre-trained Language Model for Chinese Legal Long Documents. arXiv:2105.03887（數據已從 ar5iv 全文核對）；期刊版 AI Open, Vol. 2, pp. 79–84, 2021（此期刊出處係透過引用它的 survey 確認，未直接查證出版社頁面）",
+      "url": "https://arxiv.org/abs/2105.03887",
+      "relevance": "這是本專案唯一真正可用的「中文法律專用」預訓練模型，但有三個對本專案致命的落差必須在報告中講清楚：(1) 語料 100% 簡體中文、100% 中國大陸法源，刑法條號與罪名體系與台灣刑法 309/310 條完全不同；(2) 4,096 token 的長文件優勢對本專案「單則網路言論」這種短文本毫無用處，反而是純粹的參數浪費；(3) 對 PWA 端側部署來說，Longformer 的 sliding-window attention 在 ONNX Runtime Web 上的算子支援與體積都遠比 BERT-base 麻煩。結論應該是「評估過但不採用」，並說明理由——這比默默不提更有說服力。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "HFL（哈工大訊飛聯合實驗室）釋出了法律領域的中文 ELECTRA 系列：legal-ELECTRA-large（1G）、legal-ELECTRA-base（383M）、legal-ELECTRA-small（46M），HuggingFace ID 分別為 hfl/chinese-legal-electra-{large,base,small}-discriminator，2020 年 12 月釋出。但官方 README 對語料只有一句「基于大规模法律文书数据，我们训练了面向司法领域的中文ELECTRA系列模型」，完全沒有公布語料來源、規模或 token 數；模型卡也只寫「This model is specifically designed for legal domain」。建議引用的論文是 Cui et al. (2020) Revisiting Pre-Trained Models for Chinese NLP（Findings of EMNLP 2020, arXiv:2004.13922）與 Cui et al. (2021) Pre-Training with Whole Word Masking for Chinese BERT（IEEE/ACM TASLP）。",
+      "source": "ymcui/Chinese-ELECTRA GitHub README 與 HuggingFace 模型卡（官方文件，已直接核對）",
+      "url": "https://github.com/ymcui/Chinese-ELECTRA",
+      "relevance": "legal-ELECTRA-small 只有 46MB，是本專案 PWA 端側部署最值得實測的候選之一（量化後可壓到 20MB 以下，適合瀏覽器下載）。但必須在報告中誠實註明：它的「法律領域」宣稱無法查證——官方從未公布語料內容與規模，而且幾乎確定是簡體中國法律文書。因此「legal-ELECTRA 比通用模型更懂法律」這種說法在本專案的繁中場景下不可直接宣稱，只能靠自己的實測數字說話。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "MultiLJP 是專門處理「一份判決、多個被告、各自不同判決結果」的資料集，取自中國裁判文書網，經前處理與人工標註後含 23,717 件多被告案件。關鍵做法是：放棄用正則表達式從判決書抽標籤，改由 8 位專業標註者為每一個被告分別標註法條、罪名、刑期、共犯關係與量刑情節。對應方法為 Hierarchical Reasoning Network (HRN)。論文指出兩大挑戰之一正是「各被告之間的判決結果難以區分」。",
+      "source": "Yougang Lyu et al. (2023). Multi-Defendant Legal Judgment Prediction via Hierarchical Reasoning. Findings of EMNLP 2023. arXiv:2312.05762（作者名單未逐一核對，請以 ACL Anthology 2023.findings-emnlp.145 為準）",
+      "url": "https://arxiv.org/abs/2312.05762",
+      "relevance": "這是文獻中最接近本專案「標籤粒度錯配」的技術前例：同一份判決書裡有多個應該被分別標註的對象，而正則抽取無法正確歸屬標籤。本專案的情況是「一份判決、多則言論、各則可能構成不同罪名」，結構完全同型。這篇的結論很有參考價值也很殘酷——他們最後是花 8 個標註者人工標了 23,717 件，意即在這種粒度問題上「自動抽取無解」是領域共識。本專案 extract_incident_table() 能從起訴書附表直接取得逐則標籤，其實是一個比 MultiLJP 更省力的巧解，值得在報告中當成方法論貢獻強調。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "司法院「資料開放平臺」(opendata.judicial.gov.tw) 提供裁判書的官方 RESTful JSON API，端點包含 https://data.judicial.gov.tw/jdg/api/Auth（POST 帳號密碼換取 Token，Token 有效 6 小時）、/jdg/api/JList（異動清單）、/jdg/api/JDoc（裁判書全文，以 jid 為識別碼）、/jdg/api/JFile 與 /jdg/api/JDocFile（附件與 PDF 全文下載）。API 服務每日僅在 0 時至 6 時開放。需先在平臺註冊會員帳號；裁判書屬「會員限定」開放資料。API 規格書版本日期 114.08.22（2025-08-22）。",
+      "source": "司法院資料開放平臺「裁判書 API 規格說明」PDF（官方文件，https://opendata.judicial.gov.tw/api/Newses/42/file，已下載並解析其端點與條件；PDF 中文字型未嵌入，中文敘述部分無法逐字還原，URL 與時間窗數字為直接讀取）",
+      "url": "https://opendata.judicial.gov.tw/",
+      "relevance": "本專案目前是爬 judgment.judicial.gov.tw 的 HTML 並靠日期區間二分法繞過 500 筆上限（見 CLAUDE.md），這條官方 API 路線是更穩定、更合法、也更禁得起技術報告檢視的替代方案：有 jid 唯一識別碼（可徹底解決現在靠原文網址去重的問題）、有異動清單（可做增量更新）、且不受 500 筆上限限制。代價是必須註冊、只能在 0–6 時跑、Token 每 6 小時換發。報告的「資料取得」章節應該兩者並述，並說明為何選了現行方案（或建議改採 API）。TW-LegalBench 也正是用這個平臺取得判決。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "憲法法庭 113 年憲判字第 3 號判決（112 年 12 月 25 日言詞辯論、113 年 4 月 26 日即 2024-04-26 宣示）認定刑法第 309 條第 1 項公然侮辱罪合憲，但大幅限縮其適用範圍：須「依個案之表意脈絡，表意人故意發表公然貶損他人名譽之言論，已逾越一般人可合理忍受之範圍」，且須權衡該言論是否有益於公共事務思辯、是否屬文學藝術表現形式、或具學術專業正面價值，於個案足認他人名譽權應優先於言論自由者，始屬合憲範圍。聲請人共 24 人（12 位人民、12 位法官）。部分已確定判決得提非常上訴，另有數件經廢棄發回更審。",
+      "source": "憲法法庭 113 年憲判字第 3 號判決（官方全文可於 cons.judicial.gov.tw 下載）；本次係透過中央社 2024-04-26 報導與搜尋結果中的判決主文文字核對，未直接開啟官方 PDF 逐字確認",
+      "url": "https://www.cna.com.tw/news/asoc/202404260274.aspx",
+      "relevance": "這是本專案的標籤語意漂移（label drift）風險來源，必須在報告中揭露。2024-04-26 之後的公然侮辱判決適用的是新的、更嚴格的限縮標準，同一句話在 2023 年可能成罪、2025 年可能不成罪。若訓練集橫跨這個日期而又用隨機切分，模型學到的是兩套混在一起的標準。建議的具體動作：(1) 在資料集加一欄標示裁判日期是否在 2024-04-26 之後；(2) 做一次 pre/post 分組的準確率對照；(3) PWA 的免責聲明要寫明模型反映歷史判決分布，而非現行限縮標準。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "LawShift 是專門評估 LJP 模型在「法條修正」情境下適應能力的 benchmark，涵蓋 31 種細分的法規變動類型。論文指出現有 SOTA 模型「既未被設計、也未被評估」用於處理法規修正，並在 5 個代表性 SOTA 模型上發現顯著缺陷；結論是模型架構對適應性有關鍵影響。發表於 NeurIPS 2025 Datasets and Benchmarks Track。作者包含 Zhuo Han, Yi Yang, Yi Feng, Wanhong Huang, Xuxing Ding, Chuanyi Li, Jidong Ge, Vincent Ng（南京大學、UT Dallas）。",
+      "source": "Han et al. (2025). LawShift: Benchmarking Legal Judgment Prediction Under Statute Shifts. NeurIPS 2025 Datasets and Benchmarks Track",
+      "url": "https://papers.nips.cc/paper_files/paper/2025/hash/adf82a0a1d52d93961476458b9566a2b-Abstract-Datasets_and_Benchmarks_Track.html",
+      "relevance": "與上一條的憲判字第 3 號直接扣合：法規/解釋變動導致 LJP 模型失效，已經是 2025 年有專屬 benchmark 的獨立研究問題。本專案可以引用它來論證「為什麼要特別處理 2024 年的限縮解釋」不是過度謹慎，而是領域已識別的核心弱點。對 PWA 的產品層面也有含意：端側模型一旦打包進 app 就難以隨法律變動更新，報告應討論模型版本與法律時效的綁定策略（例如在 UI 顯示「本模型訓練資料截至 YYYY-MM」）。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "LeCaRD 是中文法律類案檢索資料集，含 107 個查詢案件與 43,000 餘個候選案件，來源為中國最高人民法院公布的刑事案件，發表於 SIGIR 2021（DOI 10.1145/3404835.3463250）。後續 LeCaRDv2（arXiv:2310.17609）擴充至 800 個查詢、涵蓋 50 個罪名、55,192 個候選案件，並把法律相關性標準細分為 characterization（定性）、penalty（量刑）、procedure（程序）三個面向加上 Overall Relevance。",
+      "source": "Ma et al. (2021). LeCaRD: A Legal Case Retrieval Dataset for Chinese Law System. SIGIR '21；LeCaRDv2 見 arXiv:2310.17609（作者名單未逐一核對）",
+      "url": "https://arxiv.org/abs/2310.17609",
+      "relevance": "LeCaRD 本身是檢索任務，與本專案的分類任務不同，列入主要是為了讓 related work 對中文法律 NLP 資源有完整交代（它也是 Lawformer 的標準評測集之一）。真正有用的是 LeCaRDv2 把「相關性」拆成定性／量刑／程序三面向的做法——本專案若未來要做「找相似歷史案例」這種對使用者更實用的功能（比單純輸出罪名標籤更不易誤導），這個三面向標準是現成的設計參考。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "台灣另有一篇被國際 LJP 綜述引用的本地研究：以 k-NN、CART、random forest 做迴歸，預測台灣死亡車禍案件中「精神慰撫金」的酌定金額；random forest 表現最佳，最重要的特徵是「原告請求的慰撫金金額」與「被害人年齡」。該文被 Medvedeva & Mcbride (2023) 列為少數「從判決書中抽取因素/變數而非直接用判決全文」的做法之一，但該綜述同時質疑「這些因素是否在判決前就已知」並不總是清楚。",
+      "source": "Decheng Hsieh, Lieuhen Chen, Taiping Sun (2021). Legal Judgment Prediction Based on Machine Learning: Predicting the Discretionary Damages of Mental Suffering in Fatal Car Accident Cases. Applied Sciences, 11(21):10361. DOI 10.3390/app112110361（Crossref 核對）",
+      "url": "https://doi.org/10.3390/app112110361",
+      "relevance": "證明台灣學者在 LJP 上的研究已經進入國際綜述的視野，本專案的 related work 不該漏掉。更重要的是它示範了一條本專案可借鏡的中間路線：不要把整份判決文字丟給模型，而是抽出法律上有意義的結構化因素。對應到妨害名譽，可抽的因素包括「是否指摘具體事實」「是否在公開平台」「對象是否為公眾人物」「是否涉及公共議題」——後兩者正是憲判字第 3 號要求權衡的要素。這種特徵工程版本可以當成 BERT 的可解釋性對照組，而且輕量到完全不需要端側神經網路。"
+    },
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "公開可取得的繁體中文判決書語料極少且規模很小。HuggingFace 上的台灣法律資料集多為小型或合成資料，例如 lianghsun/tw-judgment-gist 只有 31 列（來源為司法院公開之裁判精選，授權 CC BY-NC 4.0，且為 gated 需同意分享聯絡資訊），另有 lianghsun/tw-legal-synthetic-qa（合成問答）、lianghsun/tw-law-article-chat（法條問答，gated）等。此外 arXiv:2410.11450 提出一個涵蓋台灣民事、刑事、行政法規的中英跨語言「法條檢索」(Statutory Article Retrieval) 資料集（Yen-Hsiang Wang, Feng-Dian Su, Tzu-Yu Yeh, Yao-Chung Fan, 2024），但其規模與是否公開釋出在 arXiv 摘要頁上未說明。",
+      "source": "HuggingFace 資料集頁面（官方，已直接核對 tw-judgment-gist 的列數、授權與 gated 狀態）；arXiv:2410.11450 摘要頁",
+      "url": "https://huggingface.co/datasets/lianghsun/tw-judgment-gist",
+      "relevance": "直接支撐本專案最核心的貢獻主張：繁中、句子層級、妨害名譽罪名標註的資料集目前不存在，所以本專案自行爬取並標註是必要的，不是重複造輪子。報告可以這樣寫：唯一規模相當的繁中判決集是 Peng & Lei 的 figshare 釋出（218,120 份，但整案粒度、誹謗僅 3,884 件、且無逐則言論標註），HuggingFace 上的台灣法律資料集則都是數十列的小樣本或合成資料。這同時也是本專案考慮公開釋出資料集的理由。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Whole Word Masking（WWM）在中文的作法是：先用中文分詞工具（LTP）切詞，遮罩時把同一個詞的所有漢字一起遮住，而不是只遮單一漢字。HFL 釋出的 BERT-wwm 僅用中文維基百科訓練（100K steps max_len=128 + 100K steps max_len=512），BERT-wwm-ext 則加入擴充語料共 5.4B tokens（1M steps max128 + 400K steps max512）。",
+      "source": "Cui et al., \"Pre-Training with Whole Word Masking for Chinese BERT\", arXiv:1906.08101；以及 HFL 官方 repo github.com/ymcui/Chinese-BERT-wwm（已實際抓取）",
+      "url": "https://github.com/ymcui/Chinese-BERT-wwm",
+      "relevance": "專案的 ml/02_chinese-bert-wwm 用的就是這個模型。報告寫「改良點」時可以精確說明 wwm 是遮罩單位的改變（字→詞），不是架構改變，所以 checkpoint 可直接當 BERT 載入——這也解釋為何四個模型能無痛集成。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "HFL 的 chinese-roberta-wwm-ext 並不是真正的 RoBERTa。官方 FAQ 原文：「该模型并非原版RoBERTa模型，只是按照类似RoBERTa训练方式训练出的BERT模型」。具體差異：取消了 NSP loss、訓練步數更長（1M steps，large 為 2M steps）、全程 max_len=512、語料 5.4B tokens，但**沒有**採用 RoBERTa 的 dynamic masking，且必須用 BertTokenizer / BertModel（而非 RobertaTokenizer）載入。",
+      "source": "HFL 官方 repo github.com/ymcui/Chinese-BERT-wwm 的 FAQ 區段（已實際抓取原文）",
+      "url": "https://github.com/ymcui/Chinese-BERT-wwm",
+      "relevance": "專案最常用的就是 hfl/chinese-roberta-wwm-ext（grep 出現 23 次）。技術報告如果寫「使用 RoBERTa 模型，改良點為動態遮罩」會是**事實錯誤**。正確敘述是：BERT 架構 + RoBERTa 式訓練配方（去 NSP、更多資料、更長序列），不含動態遮罩。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "MacBERT 的核心改良「MLM as correction (Mac)」是：不使用 [MASK] 這個在 fine-tune 階段從不出現的特殊符號，而是把要遮的 token 換成 word2vec 相似度算出的近義詞（找不到近義詞時退化為隨機詞），讓模型學「糾錯」而非「填空」，以消除 pre-train / fine-tune 的落差。另外採用 N-gram 遮罩（unigram 40%、bigram 30%、trigram 20%、4-gram 10%），以及用 SOP（Sentence-Order Prediction）取代 NSP。主神經架構與 BERT 完全相同，可直接替換。",
+      "source": "Cui et al., \"Revisiting Pre-Trained Models for Chinese Natural Language Processing\", Findings of EMNLP 2020, arXiv:2004.13922；HuggingFace 官方 model card hfl/chinese-macbert-base（兩者均已抓取）",
+      "url": "https://huggingface.co/hfl/chinese-macbert-base",
+      "relevance": "專案 grep 中 hfl/chinese-macbert-base 只出現 1 次（可能只是備選）。若要在報告的「模型選擇」小節解釋為何沒有全面改用 MacBERT，下一條的實測數字提供了依據。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "MacBERT 論文原始表格顯示，在**單句分類**任務上整個中文 PLM 家族差異極小：ChnSentiCorp 測試集 BERT 95.0 / BERT-wwm 95.4 / BERT-wwm-ext 95.3 / RoBERTa-wwm-ext 95.6 / ELECTRA-base 94.5 / MacBERT-base 95.6 / MacBERT-large 95.9；THUCNews 全部落在 97.7~97.9。但在語意較難的**句對分類**上差距放大：XNLI 測試集 BERT 77.8 / BERT-wwm 78.2 / RoBERTa-wwm-ext 78.8 / ELECTRA-base 78.4 / MacBERT-base 79.3 / ELECTRA-large 81.0 / MacBERT-large 81.3。",
+      "source": "arXiv:2004.13922（Cui et al. 2020）實驗表格，經 ar5iv HTML 版本實際讀取",
+      "url": "https://ar5iv.labs.arxiv.org/html/2004.13922",
+      "relevance": "直接支撐報告中「backbone 不是本專案的主要增益來源」這個論述：在中文分類任務上換 HFL 家族成員通常只值 0.3~1 分，而本專案從 45.7% 推到 85.6% 的增益顯然來自資料／標籤設計／集成，不是模型選型。同時也提醒：難度高、語意模糊的任務（像 309 vs 310 條的區辨）模型差異才會顯現到 3 分左右——所以把 MacBERT 加入集成仍值得一試。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "ELECTRA 的改良點是把 MLM 換成 replaced token detection（RTD）：用一個小 generator 把部分 token 換成「看似合理的替代詞」，再訓練 discriminator 判斷每個 token 是否被替換過。因為訓練信號定義在**所有** input token 上（而非只有被遮的 15%），sample efficiency 顯著高於 MLM，在相同模型大小／資料／算力下表現優於 BERT。",
+      "source": "Clark, Luong, Le, Manning, \"ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators\", ICLR 2020, arXiv:2003.10555（Google Research 官方頁面）",
+      "url": "https://research.google/pubs/electra-pre-training-text-encoders-as-discriminators-rather-than-generators/",
+      "relevance": "專案用了 hfl/chinese-legal-electra-base-discriminator。報告要說明「為什麼用 discriminator 而不是 generator」時，這就是依據：ELECTRA 的下游編碼器就是 discriminator，generator 訓練完即丟棄。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "HFL 的中文 ELECTRA 官方 repo 列出的規模：ELECTRA-small 12 層 / 256 hidden / 12M 參數（180g 版檔案約 46MB）、small-ex 24 層 / 25M、base 12 層 / 768 hidden / 102M、large 24 層 / 324M（檔案約 1GB）。官方宣稱「ELECTRA-small模型可与BERT-base甚至其他同等规模的模型相媲美，而参数量仅为BERT-base的1/10」，但該 repo 的實測表格也顯示 small 在多數中文任務上仍不如 BERT-base（只是勝過同規模基線）。",
+      "source": "HFL 官方 repo github.com/ymcui/Chinese-ELECTRA（已實際抓取模型規格與宣稱原文）",
+      "url": "https://github.com/ymcui/Chinese-ELECTRA",
+      "relevance": "對 PWA 端側部署是關鍵數字：46MB 的 ELECTRA-small 是這個家族裡唯一落在手機下載預算內的選項，而專案目前用的 chinese-legal-electra-base 是 102M 參數。但要注意官方自己的表格顯示 small 會掉分——報告應把「small 可比 base」當成官方宣稱而非已驗證結論，並規劃自行實測掉幾分。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "hfl/chinese-legal-electra-base-discriminator 確實存在，由 HFL（哈工大訊飛聯合實驗室）釋出，model card 明確寫 \"This model is specifically designed for legal domain\"，引用的論文是 MacBERT 那篇（arXiv:2004.13922），對應 repo 是 Chinese-ELECTRA。但 model card **沒有**披露法律語料的來源、規模或預訓練步數。",
+      "source": "HuggingFace 官方 model card（已實際抓取）",
+      "url": "https://huggingface.co/hfl/chinese-legal-electra-base-discriminator",
+      "relevance": "報告在描述這個模型時只能說「HFL 釋出的法律領域中文 ELECTRA」，不能寫出具體語料來源或規模——官方沒公布。這也是個誠實的 limitation：領域預訓練語料不透明，無法判斷是否與台灣判決書語體相近（中國大陸法律語料 vs 台灣判決書用語差異不小）。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Lawformer 是 THUNLP 釋出的中文法律長文件預訓練模型，基於 Longformer 架構，設計動機是「法律文件常達數千 token，遠超主流 PLM 的處理長度」，在判決預測、類案檢索、法律閱讀理解等任務上評測。",
+      "source": "Xiao et al., \"Lawformer: A Pre-trained Language Model for Chinese Legal Long Documents\", arXiv:2105.03887 (2021)，程式碼在 github.com/thunlp/LegalPLMs",
+      "url": "https://arxiv.org/abs/2105.03887",
+      "relevance": "專案的 05/10 實驗用了 thunlp/Lawformer，且 git log 顯示曾把 Lawformer 當離群值處理。這條提供了合理解釋可寫進報告：Lawformer 的設計優勢在**長文件**，而本專案句子層級任務的輸入是一則幾十字的網路留言，完全用不到 long-attention，所以表現離群是符合預期的，不是實作錯誤。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "「訓練損失應對齊評估指標」在 NLP 有最直接的文獻依據：Dice Loss 論文摘要原文指出 cross entropy「is accuracy-oriented and creates a discrepancy between training and test: at training time, each instance contributes equally, while at test time F1 score concerns more about positive examples」，因此提出用 Sørensen–Dice coefficient 為基礎的 dice loss 取代 cross-entropy，讓 false positive 與 false negative 受到相近的重視。",
+      "source": "Li, Sun, Meng, Liang, Wu, Li, \"Dice Loss for Data-imbalanced NLP Tasks\", ACL 2020, aclanthology.org/2020.acl-main.45（arXiv:1911.02855）",
+      "url": "https://aclanthology.org/2020.acl-main.45",
+      "relevance": "這是本專案「加權後 macro-F1 +0.018」最該引的一句話——它用 NLP 任務（而非 CV）直接論證 cross-entropy 的目標與 F1 評估不一致。報告可以寫：我們的 class weighting 是對這個 train/test 目標落差的一種補償，Dice loss 是同一思路下更徹底的做法，列為未來工作。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "F-measure 的理論困難在於它不是樣本可分解（non-decomposable）的指標，不能像 cross-entropy 一樣逐樣本求和後直接做 SGD。文獻上有兩條原則性路徑：empirical utility maximization（EUM，直接在訓練資料上最佳化 F）與 decision-theoretic（先學機率模型、再預測期望 F 最大的標籤）。兩者在模型正確且資料量大時漸近等價；實測上 EUM 對模型誤指定（model misspecification）較穩健，而 decision-theoretic 在處理稀有類別與領域轉移時較好。",
+      "source": "Ye, Chai, Lee, Chieu, \"Optimizing F-measure: A Tale of Two Approaches\", ICML 2012, arXiv:1206.4625",
+      "url": "https://arxiv.org/abs/1206.4625",
+      "relevance": "為「為什麼不能直接把 macro-F1 當 loss」提供嚴謹說法，也正當化 class weighting 這種「代理（surrogate）」做法。更關鍵的實務推論：decision-theoretic 路徑（訓練好機率模型後再調整決策門檻）在稀有類別上較優——本專案的 誹謗 類別偏少，值得試「不改 loss、只在 dev set 上調 per-class threshold」，這在端側推論完全免費。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "對於由混淆矩陣任意函數定義的「複雜」效能指標（含 multiclass G-mean、micro-F1 等），存在可證明 consistent 的演算法：把學習問題視為在可達混淆矩陣集合上的最佳化，再用 Frank-Wolfe（凹指標）或二分法（ratio-of-linear 指標）求解，實測勝過 multiclass SVMperf。",
+      "source": "Narasimhan, Ramaswamy, Saha, Agarwal, \"Consistent Multiclass Algorithms for Complex Performance Measures\", ICML 2015, PMLR 37:2398-2407",
+      "url": "https://proceedings.mlr.press/v37/narasimhanb15.html",
+      "relevance": "如果報告的「方法論合理性」一節被要求提供理論支撐而非只是工程經驗，這是最硬的一條：確實存在針對混淆矩陣型指標的 consistent 演算法，所以「對齊 loss 與 metric」不是直覺、是有理論基礎的方向。可誠實加註：本專案並未實作這類演算法，只用了較簡單的 class weighting 代理。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "NLP 領域針對類別不平衡的綜述明確指出，重採樣或更改損失函數通常只帶來有限效益——原文：\"re-sampling or changing the loss function may lead to small to moderate gains\"；也說明 cross-entropy「is composed from the predictions for instances that carry the label in the gold standard, which is why the resulting classifiers fit the minority classes less well」；並強烈建議研究者「should always report per-class statistics」，在不平衡設定下使用 macro-average、balanced accuracy、per-class recall。該綜述另引述：在英文與中文的序列標註、QA、匹配任務上，Dice loss 表現優於 focal loss 與 ADL。",
+      "source": "Henning, Beluch, Fraser, Friedrich, \"A Survey of Methods for Addressing Class Imbalance in Deep-Learning Based Natural Language Processing\", EACL 2023, aclanthology.org/2023.eacl-main.38（arXiv:2210.04675，已讀 ar5iv 全文）",
+      "url": "https://aclanthology.org/2023.eacl-main.38",
+      "relevance": "這是本專案 +0.018 macro-F1 最誠實的定位：綜述說這類方法的預期增益就是「small to moderate」，所以 +0.018 是符合文獻預期的真實效果，不該被包裝成重大突破，也不該被當成失敗。另外它支持報告必須附 per-class（公然侮辱 / 誹謗分開）的 P/R/F1，不能只報 76%。還提供一個具體下一步：在中文任務上 Dice > focal loss。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Focal loss 的做法是在標準 cross-entropy 前乘上 (1 - p_t)^γ 調變因子：γ > 0 時會降低已分類良好樣本（p_t > 0.5）的相對損失，把訓練重心推向困難、被錯分的樣本，用來解決前景／背景極端不平衡。",
+      "source": "Lin, Goyal, Girshick, He, Dollár, \"Focal Loss for Dense Object Detection\", ICCV 2017, arXiv:1708.02002",
+      "url": "https://arxiv.org/abs/1708.02002",
+      "relevance": "報告如果提到「曾考慮或實測 focal loss」，這是標準引用。重要對照：focal loss 處理的是「easy negative 淹沒訓練」的極端不平衡（物件偵測中前景:背景可達 1:1000），而本專案 公然侮辱 vs 誹謗 的不平衡遠沒那麼極端，所以 focal loss 的效益預期有限——這與上一條綜述的中文實測（Dice > focal）一致。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Class-Balanced Loss 提出用「有效樣本數」而非原始樣本數來設定類別權重：權重正比於 (1-β)/(1-β^n)，其中 n 為該類樣本數、β ∈ [0,1) 為超參數。理論動機是樣本之間有重疊，隨樣本數增加，新樣本的邊際資訊量會遞減。在人工長尾化的 CIFAR 與 ImageNet / iNaturalist 上有顯著增益。",
+      "source": "Cui, Jia, Lin, Song, Belongie, \"Class-Balanced Loss Based on Effective Number of Samples\", CVPR 2019, arXiv:1901.05555",
+      "url": "https://openaccess.thecvf.com/content_CVPR_2019/html/Cui_Class-Balanced_Loss_Based_on_Effective_Number_of_Samples_CVPR_2019_paper.html",
+      "relevance": "若專案目前的 class weighting 用的是 inverse frequency（最常見做法），這條提供一個便宜的改良方向：改用 effective-number 權重。對於 誹謗 類別樣本不算極少的情況，β 調小會讓權重更接近均勻，可能比 inverse frequency 更穩定。可作為「為何選擇這個加權公式」的文獻依據。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "LDAM 論文提出兩個方法：(1) label-distribution-aware margin loss，由 margin-based 泛化界推導，給稀有類別更大的 margin；(2) deferred re-weighting (DRW)，即**延後**到訓練後期才開始加權，讓模型先在未加權狀態學到良好表徵，避開一開始就加權／重採樣造成的最佳化困難。兩者單獨使用即勝過既有技術，合併效果更好。",
+      "source": "Cao, Wei, Gaidon, Arechiga, Ma, \"Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss\", NeurIPS 2019, arXiv:1906.07413",
+      "url": "https://proceedings.neurips.cc/paper/2019/hash/621461af90cadfdaf0e8d4cc25129f91-Abstract.html",
+      "relevance": "一個低成本、高機率有效的實驗：如果本專案目前是從 epoch 0 就開啟 class weight，改成 DRW（前幾個 epoch 不加權、後期才加權）很可能把 +0.018 推高。這也是報告「未來工作」一節能寫得具體的建議，而非泛泛而談。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "成本敏感學習的經典結論：最佳的成本敏感分類是在模型後驗機率下選擇期望成本最低的類別，等價於把決策門檻從 0.5 移向稀有／代價高的那一類。Elkan 並論證「改變訓練集中負樣本比例」對標準貝氏與決策樹學習器產生的分類器影響很小，因此建議直接用機率估計明確計算最佳決策，而不是靠重採樣。",
+      "source": "Elkan, \"The Foundations of Cost-Sensitive Learning\", IJCAI 2001",
+      "url": "https://mlanthology.org/ijcai/2001/elkan2001ijcai-foundations",
+      "relevance": "為「調門檻 vs 改 loss vs 重採樣」三條路線提供最早的理論排序：Elkan 偏好調門檻。對 PWA 端側部署特別有價值——調門檻是零成本的後處理，不需要重訓也不增加模型大小，可以直接寫進手機應用的推論邏輯。注意：我未取得全文 PDF，上述為二手摘述。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "在 CNN 的類別不平衡系統性研究中，於 MNIST、CIFAR-10、ImageNet 三個難度遞增的資料集上比較了過採樣（oversampling）、欠採樣、two-phase training、以及補償先驗機率的 thresholding；結論是過採樣在幾乎所有情境下都是主導方法。",
+      "source": "Buda, Maki, Mazurowski, \"A systematic study of the class imbalance problem in convolutional neural networks\", Neural Networks 106:249-259, 2018, arXiv:1710.05381",
+      "url": "https://arxiv.org/abs/1710.05381",
+      "relevance": "可作為「為何也測了重採樣」的引用，但報告應明確標註這是**電腦視覺**的結論；上面 Henning et al. 的 NLP 綜述並未給出同樣強的過採樣優勢，而 NLP 文本過採樣有過擬合風險。把兩條並列呈現，比單引一條更誠實。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "「標籤粒度與預測粒度不匹配」在弱監督文獻中的正式名稱是 **inexact supervision**（不確切監督）。周志華把弱監督分成三類：incomplete supervision（只有部分資料有標籤）、inexact supervision（標籤的粒度比需要的更粗）、inaccurate supervision（標籤本身可能錯誤）。",
+      "source": "Zhou Zhi-Hua, \"A brief introduction to weakly supervised learning\", National Science Review 5(1):44-53, 2018",
+      "url": "https://doi.org/10.1093/nsr/nwx106",
+      "relevance": "這正是報告需要的術語：本專案的「判決書層級罪名標籤 → 句子層級預測」就是標準的 inexact supervision，而爬蟲 fallback 路徑把整篇判決的引號句都貼上同一罪名又同時引入 inaccurate supervision。用這個分類法來寫 limitation 一節，比自創說法專業得多。注意：我透過搜尋確認了出處與三分類，但未讀全文。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Multiple Instance Learning 的形式化設定：樣本（instance）被組織成袋（bag），只有袋被標註。MIL 的假設是——標為負的袋裡每個 instance 都是負的；標為正的袋裡**至少有一個** instance 是正的。文獻另指出 bag-level accuracy 與 instance-level accuracy 之間差距顯著，其中一邊表現好不代表另一邊也好。",
+      "source": "MIL 定義與 bag/instance 評估差異：Carbonneau 等人的 MIL 綜述脈絡與 NeurIPS 2007 \"Multiple Instance Active Learning\"（Settles, Craven, Ray）等文獻。原始提出一般歸於 Dietterich, Lathrop, Lozano-Pérez, \"Solving the multiple instance problem with axis-parallel rectangles\", Artificial Intelligence 1997——此條歸屬我未直接查證原文。",
+      "url": "https://papers.nips.cc/paper/3252-multiple-instance-active-learning",
+      "relevance": "本專案就是 MIL：一篇判決 = 一個 bag，其中的每則網路言論 = instance，罪名標籤只貼在 bag 上。最實用的推論是「bag-level 好不代表 instance-level 好」——這恰好解釋了專案的 判決層級 86% 遠高於 句子層級 76%，而且文獻說這個落差是 MIL 的結構性現象，不是模型沒調好。這一點值得在報告中明說。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "與本專案結構最接近的已發表 NLP 工作：MILNET 只用**文件級**情感標籤訓練，就能預測**句子／EDU 級**的情感極性，完全沒有 segment-level 監督；做法是 attention-based polarity scoring，另釋出 SPOT（Segment-level POlariTy annotations）資料集作為細粒度評估。",
+      "source": "Angelidis & Lapata, \"Multiple Instance Learning Networks for Fine-Grained Sentiment Analysis\", TACL 6:17-31, 2018, aclanthology.org/Q18-1002（DOI 10.1162/tacl_a_00002）",
+      "url": "https://aclanthology.org/Q18-1002/",
+      "relevance": "這是文獻回顧中最有價值的一條「前人工作」：它證明「粗粒度標籤訓練 + 細粒度預測」在 NLP 是成立且有既定方法的研究範式，而不是本專案的權宜之計。具體可借用的架構：把一篇判決的所有言論句一起餵入，用 attention pooling 聚合成判決層級預測、以判決層級標籤訓練，再取 attention 權重／句級 logit 作為句子層級輸出。這可能同時改善 76% 與 86% 兩個數字，且不需新標註。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Distant supervision 的原始定義：不使用人工標註語料，而是把一個知識庫（原文用 Freebase）對齊到大規模未標註文本——對知識庫中每一組有關係的實體對，找出所有同時包含這兩個實體的句子，假設它們都表達該關係，抽取特徵後訓練分類器。這個假設必然引入錯誤標籤。後續標準修正方式是改用 multi-instance learning：Zeng et al. 的 PCNN 明確把遠距監督關係抽取視為 multi-instance 問題，以處理 instance 標籤的不確定性。",
+      "source": "Mintz, Bills, Snow, Jurafsky, \"Distant supervision for relation extraction without labeled data\", ACL-IJCNLP 2009, pp.1003-1011, aclanthology.org/P09-1113；Zeng, Liu, Chen, Zhao, \"Distant Supervision for Relation Extraction via Piecewise Convolutional Neural Networks\", EMNLP 2015, pp.1753-1762, aclanthology.org/D15-1203",
+      "url": "https://aclanthology.org/P09-1113/",
+      "relevance": "本專案的標籤生成流程就是遠距監督：知識源 = 判決書的主文罪名，對齊目標 = 判決書中引號內的言論句，假設 = 每則言論都構成該罪名。這個假設在多被告／多罪名判決上必然出錯（CLAUDE.md 的 Known gaps 已自己發現：_extract_crime_label 只取第一個關鍵字命中）。報告可以直接用 Mintz 2009 為這個方法命名與正當化，再用 Zeng 2015 指出業界標準解法（MIL pooling）作為改進方向。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "深度學習在雜訊標籤下的學習已有系統性綜述：整理 62 種 robust training 方法，依方法論差異分為五類（含 robust architecture、robust regularization、robust loss design、loss adjustment、sample selection），並系統比較六個性質、分析 noise rate 估計與評估方法論。",
+      "source": "Song, Kim, Park, Shin, Lee, \"Learning from Noisy Labels with Deep Neural Networks: A Survey\", IEEE Transactions on Neural Networks and Learning Systems 34(11):8135-8153, 2023（arXiv:2007.08199）",
+      "url": "https://arxiv.org/abs/2007.08199",
+      "relevance": "報告的 limitation／future work 一節可引此綜述為「標籤雜訊有成熟工具箱」的依據，並具體點名兩類最適合本專案的：sample selection（用 small-loss 準則篩掉遠距監督錯標的句子）與 loss adjustment。因為本專案的雜訊來源明確（多被告判決、多罪名主文），而非隨機雜訊，sample selection 的命中率應該不錯。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "中文毒性語言偵測最直接的對照數字：ToxiCN 資料集共 12,011 則中文留言（非毒 5,550；毒 6,461，其中一般攻擊性言論 816、仇恨言論 5,645）。在**毒性二分類**上 F1 為 BERT 79.7 / BERT+TKE 80.0 / RoBERTa 80.3 / RoBERTa+TKE 80.6；在**毒性子類型判別**（區分仇恨言論 vs 一般攻擊性言論）F1 降為 BERT 77.3 / BERT+TKE 77.3 / RoBERTa 77.3 / RoBERTa+TKE 77.7；在表達類別偵測上更低，僅 55.3~56.8。",
+      "source": "Lu, Xu, Zhang, Min, Yang, Lin, \"Facilitating Fine-grained Detection of Chinese Toxic Language: Hierarchical Taxonomy, Resources, and Benchmarks\", ACL 2023, aclanthology.org/2023.acl-long.898（arXiv:2305.04446，已讀 ar5iv 實驗表）",
+      "url": "https://aclanthology.org/2023.acl-long.898",
+      "relevance": "這是回答「76% 是否合理」最有力的一條。本專案的 公然侮辱 vs 誹謗 在結構上就是「毒性子類型判別」——而中文該任務用人工精標資料、fine-tune RoBERTa 的已發表最佳成績是 77.3~77.7 F1。本專案在**遠距監督、自動標籤、法律專業語體**的更艱難條件下達到 76%，與之幾乎相同。報告可以據此說：76% 不是偏低，而是落在該類任務中文已發表水準的區間內。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "中文攻擊性語言偵測的另一個基準 COLD：COLDataset 共 37,480 則標註句（train/dev 32,157、test 5,323；test 中攻擊性 2,107、非攻擊性 3,216），涵蓋種族、性別、地域相關的攻擊性內容與反偏見內容。基線偵測器 COLDetector 以 bert-base-chinese（12 層 12 heads）微調，論文原文稱其取得全部方法中最佳表現、**81% accuracy**。細分類別上「反偏見（anti-bias）」類別正確率僅約 38%，遠低於其他類別。",
+      "source": "Deng, Zhou, Sun, Zheng, Mi, Meng, Huang, \"COLD: A Benchmark for Chinese Offensive Language Detection\", EMNLP 2022, pp.11580-11599, aclanthology.org/2022.emnlp-main.796（arXiv:2201.06025，已讀 ar5iv）",
+      "url": "https://aclanthology.org/2022.emnlp-main.796",
+      "relevance": "提供中文**二分類**攻擊性偵測的上界參考：用精標資料 + bert-base-chinese 只到 81% accuracy。對照之下本專案句子層級 76% 合理。注意誠實性：我兩次讀取該論文表格得到互相矛盾的 per-class precision/recall/F1 數值（F1 與 P/R 不自洽），所以**只能引用 81% accuracy 這個論文正文明確敘述的數字**，per-class 數值引用前必須回查原文 PDF。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "英文的同構對照呈現完全相同的遞減模式。OffensEval（SemEval-2019 Task 6）使用 OLID 共 14,100 則推文（train 13,240 / test 860 / trial 320），官方以 macro-F1 排名：Sub-task A（攻擊性 vs 非攻擊性二分類）第一名 0.829、第二 0.815、第三 0.814，全猜 NOT 的基線僅 0.420；Sub-task B（判斷攻擊**類型**）第一名 0.755、第二 0.739、第三 0.719；Sub-task C（攻擊目標）第一名 0.660。共約 800 隊報名、115 隊提交。",
+      "source": "Zampieri, Malmasi, Nakov, Rosenthal, Farra, Kumar, \"SemEval-2019 Task 6: Identifying and Categorizing Offensive Language in Social Media (OffensEval)\", SemEval-2019, aclanthology.org/S19-2010（arXiv:1903.08983，已讀 ar5iv 結果表）",
+      "url": "https://aclanthology.org/S19-2010/",
+      "relevance": "為報告提供跨語言的一致證據：全世界上百隊競賽下，「是不是攻擊性」約 0.83，「是哪一種攻擊性」就掉到 0.755。本專案 76% 正好落在後者這一層級。另外 0.420 的全猜多數類基線是個好慣例——報告應同樣列出 majority-class baseline，才能證明 76% 的實質增益。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "Davidson et al. 的經典結果展示了「整體指標掩蓋少數類災難」：最終 logistic regression 模型整體 precision 0.91 / recall 0.90 / F1 0.90 看來極佳，但**仇恨言論類別單獨只有 precision 0.44 / recall 0.61**，論文原文稱 \"almost 40% of hate speech is misclassified\"，且 \"the model is biased towards classifying tweets as less hateful or offensive than the human coders\"。作者結論：\"If we conflate hate speech and offensive language then we erroneously consider many people to be hate speakers... it is important that we are able to accurately distinguish between the two.\"",
+      "source": "Davidson, Warmsley, Macy, Weber, \"Automated Hate Speech Detection and the Problem of Offensive Language\", ICWSM 2017, 11(1):512-515（arXiv:1703.04009，已讀 ar5iv）",
+      "url": "https://arxiv.org/abs/1703.04009",
+      "relevance": "兩個直接可用的結論。一、方法論警告：本專案絕不能只報 76%／86% 整體數字，必須附 誹謗 類別單獨的 P/R——Davidson 的 0.90 整體 vs 0.44 少數類正是前車之鑑。二、失效模式預測：該模型系統性偏向「較不嚴重」的標籤。本專案可預期模型偏向判成 公然侮辱（較輕、樣本較多）而漏判 加重誹謗，這應該在混淆矩陣中驗證並寫進報告。對 PWA 更是重要——偏向輕判的法律建議工具會低估使用者風險。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "仇恨言論標註本身的信度很低：6 名標註者對 469 則推文評分，一致性非常低；即使先給標註者看一份仇恨言論的定義，雖然會讓標註者部分地向定義靠齊，**並未改善信度**。作者結論是仇恨言論的存在或許不應被當成二元的 yes/no 判斷，標註者需要更細緻的指引。",
+      "source": "Ross, Rist, Carbonell, Cabrera, Kurowsky, Wojatzki, \"Measuring the Reliability of Hate Speech Annotations: The Case of the European Refugee Crisis\", 2016（arXiv:1701.08118）",
+      "url": "https://arxiv.org/abs/1701.08118",
+      "relevance": "這是本專案一個真正的方法論**優勢**，報告應該明說：仇恨言論研究的天花板部分來自標註信度極低，而本專案的標籤來自法院判決——由具法律權威的裁判者認定罪名，而非群眾標註。代價是標籤粒度較粗（判決層級）。也就是說，本專案是「用標籤品質換標籤粒度」，與主流仇恨言論資料集的取捨方向正好相反，這個對比很適合寫進報告的貢獻陳述。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "「標註者一致性是機器學習效能的上限」這個常見說法在文獻上是**有爭議的**，不應當成已確立的事實引用。有研究明確以生醫 NLP 的證據主張 inter-annotator agreement 並不是計算語言處理效能的上界。",
+      "source": "Boguslav & Cohen, \"Inter-Annotator Agreement and the Upper Limit on Machine Performance: Evidence from Biomedical Natural Language Processing\", MEDINFO 2017, Studies in Health Technology and Informatics vol.245（已抓取頁面確認標題／作者／年份／主張）",
+      "url": "https://ebooks.iospress.nl/volumearticle/48156",
+      "relevance": "誠實性守門條：報告**不要**寫「76% 已接近人類一致性上限，所以無法再提升」這類句子——這個論證框架在文獻上被直接挑戰過。較安全的寫法是：仇恨言論／毒性子類型判別在中英文的已發表最佳成績都落在 0.75~0.81，本專案的 76% 與之相當，但這是當前方法的經驗水準，不是理論上限。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "存在一篇專門針對中文攻擊性語言偵測的綜述：Yunze Xiao, Houda Bouamor, Wajdi Zaghouani, \"Chinese Offensive Language Detection: Current Status and Future Directions\", 2024（arXiv:2403.18314），回顧既有基準、方法與工具，並強調中文的語言與文化複雜性。另有較早的通用綜述 Fortuna & Nunes, \"A Survey on Automatic Detection of Hate Speech in Text\", ACM Computing Surveys 51(4):85, 2018（DOI 10.1145/3232676，30 頁）。",
+      "source": "arXiv:2403.18314（已抓 abs 頁確認標題／作者／年份／摘要）；ACM Computing Surveys 51(4):85, 2018（經 INESC TEC 機構典藏確認卷期與 DOI）",
+      "url": "https://arxiv.org/abs/2403.18314",
+      "relevance": "文獻回顧章節的兩篇「綜述級」引用，可用來說明本專案所處的研究脈絡。誠實註記：中文綜述那篇的 PDF 我只能取得二進位內容、**無法**讀出其中的效能數字表格，所以報告不應從這篇引用任何具體 accuracy/F1；要引數字請用上面 ToxiCN、COLD、OffensEval 三條已實際讀表的來源。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ONNX Runtime Web 的 execution provider 選項為：GPU 端 webgpu / webgl / webnn(deviceType='gpu')，CPU 端 wasm（alias 為 cpu）/ webnn(deviceType='cpu')。關鍵限制官方原文：「All ONNX operators are supported by WASM but only a subset are currently supported by WebGL, WebGPU and WebNN.」",
+      "source": "ONNX Runtime 官方文件 - ONNX Runtime Web tutorials",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/",
+      "relevance": "代表「模型匯出成 ONNX 後一定能在 WASM 上跑」，但換到 WebGPU 要逐一驗證運算子。本專案的 BERT 分類器應以 WASM 為保底方案，WebGPU 當加速選項，不能當唯一方案。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "WebGL EP 已進入維護模式，官方原文：「WebGL support is in maintenance mode. It is recommended to use WebGPU for better performance.」同頁表格並指出 WebNN 僅支援 Windows 上的 Chrome/Edge，且「Node.js only support single-threaded wasm EP」。",
+      "source": "ONNX Runtime 官方文件 - Get started with ONNX Runtime Web",
+      "url": "https://onnxruntime.ai/docs/get-started/with-javascript/web.html",
+      "relevance": "技術報告不要再把 webgl 寫成三選一的對等選項。實際只有 wasm 與 webgpu 兩條路，WebNN 對手機（Android/iOS）完全不可用。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ONNX Runtime 官方量化文件明確區分：動態量化在推論時即時計算 activation 的 scale/zero_point，「These calculations increase the cost of inference, while usually achieve higher accuracy comparing to static ones.」；靜態量化需要校正資料集。選擇建議原文：「it is recommended to use dynamic quantization for RNNs and transformer-based models, and static quantization for CNN models.」預設組合建議「S8S8 with QDQ is the default setting and balances performance and accuracy. It should be the first choice.」並警告「Quantization is not a loss-less transformation. It may negatively affect a model's accuracy.」",
+      "source": "ONNX Runtime 官方文件 - Quantize ONNX models",
+      "url": "https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html",
+      "relevance": "BERT 屬 transformer，官方立場就是用動態量化，不需要準備校正資料集 — 對本專案是好消息（省掉一道工程）。同頁也要求「optimize your models using the Transformer Model Optimization Tool before quantizing」，匯出流程應照做。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "INT8 對中文 BERT 的實際體積壓縮比（我用 HuggingFace API 直接讀檔案大小實測，非估算）：Xenova/bert-base-chinese 的 onnx/model.onnx = 390.5 MiB，model_int8.onnx = 98.3 MiB（3.97×）、model_fp16.onnx = 195.4 MiB（2.00×）、model_q4.onnx = 115.2 MiB（3.39×）、model_q4f16.onnx = 78.2 MiB（4.99×）。對照 Xenova/distilbert-base-uncased：255.7 MiB → int8 64.3 MiB（3.98×）。",
+      "source": "HuggingFace Hub API 實測（curl https://huggingface.co/api/models/Xenova/bert-base-chinese/tree/main/onnx 等）",
+      "url": "https://huggingface.co/Xenova/bert-base-chinese/tree/main/onnx",
+      "relevance": "bert-base-chinese 與本專案用的 hfl 系列 vocab(21128)、架構完全同級，所以這組 390.5→98.3 MiB 可以直接當本專案的壓縮比基準，不必自己猜「大約 4 倍」。報告可以引用實測數字而非傳聞。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "Transformers.js 支援的 dtype 選項（from_pretrained / pipeline 的 dtype 參數）：fp32、fp16、q8 / int8 / uint8、q4 / bnb4 / q4f16，v4.1 另加入 q1、q1f16、q2、q2f16。並提供 ModelRegistry.get_available_dtypes() 探測某個 repo 實際有哪些量化檔案，以及 per-module dtype（不同子模組用不同精度）。v3 之前只有 quantized: true/false（等於 q8/fp32）。",
+      "source": "HuggingFace 官方文件 - Transformers.js: Using quantized models (dtypes) + transformers.js v4.1.0 release notes",
+      "url": "https://huggingface.co/docs/transformers.js/guides/dtypes",
+      "relevance": "本專案是 encoder-only 單一 session 的分類模型，沒有 encoder-decoder 的敏感度問題，可以整個模型用同一個 dtype，不需要 per-module 設定。實作上先試 q8（最小、WASM 友善），不滿意再退 fp16。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "DistilBERT 論文摘要宣稱：體積減少 40%、速度快 60%、在語言理解能力上保留 BERT 的 97%（GLUE）。方法是在**預訓練階段**做蒸餾，用 language modeling + distillation + cosine-distance 三個損失的組合。",
+      "source": "Sanh, Debut, Chaumond, Wolf, \"DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter\", arXiv:1910.01108（2019-10 投稿，v4 為 2020-03）",
+      "url": "https://arxiv.org/abs/1910.01108",
+      "relevance": "「40% 小 / 60% 快 / 保留 97%」是文獻回顧的標準引用數字，可放進報告當蒸餾可行性的論據。但注意 DistilBERT 是英文模型，中文沒有官方對應版本 — 要嘛自己蒸餾，要嘛用 hfl 的小模型（見下）。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "TinyBERT 論文摘要：4 層版本在 GLUE 上達到老師 BERT-base 的 96.8% 以上效能，同時體積小 7.5 倍、推論快 9.4 倍；6 層版本「performs on-par with its teacher BERT-base」。",
+      "source": "Jiao, Yin, Shang, Jiang, Chen, Li, Wang, Liu, \"TinyBERT: Distilling BERT for Natural Language Understanding\", arXiv:1909.10351（2019-09 投稿；Findings of EMNLP 2020）",
+      "url": "https://arxiv.org/abs/1909.10351",
+      "relevance": "TinyBERT 的兩階段（general + task-specific）蒸餾是「用自己的 4 模型集成當老師、蒸餾出一個手機端學生模型」最直接的方法論引用。本專案 86% 的判決層級集成成績正好可以當 teacher soft label 來源。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ALBERT 的兩個參數縮減技術是：(1) factorized embedding parameterization — 把大的詞彙 embedding 矩陣分解成兩個小矩陣，使 hidden size 可以成長而不用大幅增加參數；(2) cross-layer parameter sharing — 各層共用參數以降低可學習參數量。ALBERT 的 embedding size 是 128（BERT 是 768）。",
+      "source": "Lan, Chen, Goodman, Gimpel, Sharma, Soricut, \"ALBERT: A Lite BERT for Self-supervised Learning of Language Representations\", arXiv:1909.11942；技術描述引自 HuggingFace Transformers 官方 ALBERT 文件",
+      "url": "https://huggingface.co/docs/transformers/en/model_doc/albert",
+      "relevance": "ALBERT 對本專案的價值有限，而且報告要寫清楚原因：跨層參數共享只縮小**檔案體積**，每一層照樣要執行一次前向運算，FLOPs 與延遲不減。手機端的瓶頸同時是下載量與運算量，所以減層（rbt3/rbt6）或減寬（electra-small）比 ALBERT 式共享更有效。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "hfl/rbt3 規格（直接讀 HF 上的 config.json 與檔案大小實測）：model_type=bert、num_hidden_layers=3、hidden_size=768、num_attention_heads=12、intermediate_size=3072、vocab_size=21128；pytorch_model.bin = 149.1 MiB，推算約 38M 參數（149.1 MiB ÷ 4 bytes ≈ 39.1M）。",
+      "source": "HuggingFace Hub 實測：hfl/rbt3 config.json 與 /api/models/hfl/rbt3/tree/main",
+      "url": "https://huggingface.co/hfl/rbt3",
+      "relevance": "這就是本專案 ml/exp3_accuracy/runs/M2_rbt3 已經在用的模型（本地 checkpoint model.safetensors = 146.8 MiB，與官方 149.1 MiB 相符）。按實測 3.97× 壓縮比推算，INT8 ONNX 約 37 MB — 這是本專案最現實的手機端單模型方案。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "重要觀念修正：hfl 的 RBT 系列**不是知識蒸餾**。官方 repo 原文「RBT3：由RoBERTa-wwm-ext 3层进行初始化，继续训练了1M步」，且「RBT的名字是RoBERTa三个音节首字母组成，L代表large模型」。repo 另指出直接截取 RoBERTa-wwm-ext-large 前三層效果會大幅下降（CMRC 2018 僅 42.9/65.3），而 RBTL3 經過繼續預訓練後可達 63.3/83.4。",
+      "source": "ymcui/Chinese-BERT-wwm 官方 GitHub repo README",
+      "url": "https://github.com/ymcui/Chinese-BERT-wwm",
+      "relevance": "報告若寫「採用蒸餾模型 rbt3」是事實錯誤。正確說法是「層數截斷後繼續預訓練（continued pre-training）的小模型」。repo 的截層對照實驗同時證明：不能直接砍掉本專案 fine-tuned BERT 的後 9 層就當小模型用，必須走正規蒸餾或換用已經繼續預訓練好的 rbt3/rbt6。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "hfl/rbt6 規格實測：6 層、hidden 768、12 heads、intermediate 3072、vocab 21128；pytorch_model.bin = 230.3 MiB，推算約 60M 參數。作為對照，hfl/chinese-roberta-wwm-ext（12 層）為 392.5 MiB，約 102M 參數。",
+      "source": "HuggingFace Hub 實測：hfl/rbt6 與 hfl/chinese-roberta-wwm-ext 的 config.json 與檔案大小",
+      "url": "https://huggingface.co/hfl/rbt6",
+      "relevance": "提供體積/精度階梯：rbt3(149MiB) < rbt6(230MiB) < roberta-wwm-ext(392MiB)。INT8 後分別約 37 / 58 / 99 MB。rbt6 是「精度接近 base、體積減半」的折衷點，值得在 exp3 補跑一組。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "hfl/chinese-electra-180g-small-discriminator 規格實測：model_type=electra、num_hidden_layers=12、hidden_size=256、num_attention_heads=4、intermediate_size=1024、embedding_size=128、vocab_size=21128；pytorch_model.bin = 47.1 MiB，推算約 12.3M 參數。官方 repo 描述一致：「12-layer, 256-hidden, 4-heads, 12M parameters」、壓縮包 46MB，並稱「ELECTRA-small model can rival BERT-base and other models of equivalent scale, while parameters are only 1/10 of BERT-base」。",
+      "source": "HuggingFace Hub 實測 + ymcui/Chinese-ELECTRA 官方 repo README",
+      "url": "https://github.com/ymcui/Chinese-ELECTRA",
+      "relevance": "12M 參數 / 47 MiB fp32，INT8 後約 12 MB — 這是唯一能做到「下載量像一張圖片」的中文選項。注意本專案 exp3 的 M1_electra_small 其實是 24 層 / hidden 256 / embedding 256（法律領域版，本地 93.7 MiB），比 hfl 的 180g-small 大一倍，報告要寫對是哪一個。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "中文小模型的實際精度代價（官方 benchmark 測試集）：RoBERTa-wwm-ext vs RBT3 — XNLI 78.8 vs 72.3、LCQMC 86.4 vs 85.1、BQ 85.0 vs 83.3、CMRC2018 72.6/89.4 vs 62.2/81.8、DRCD 85.6/92.0 vs 75.0/83.9。RBTL3 略優於 RBT3（XNLI 74.0、LCQMC 85.1、BQ 83.6）。",
+      "source": "ymcui/Chinese-BERT-wwm 官方 repo 的小參數量模型效果對照表",
+      "url": "https://github.com/ymcui/Chinese-BERT-wwm",
+      "relevance": "關鍵觀察：句對/句子分類任務（LCQMC -1.3、BQ -1.7）掉得少，抽取式閱讀理解（CMRC EM -10.4）掉得多。本專案是**句子二分類**，正落在「小模型代價較小」的那一類，所以 rbt3 路線的風險比看 XNLI 數字（-6.5）想像的低。但仍應實測，不能直接套用。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "中文 ELECTRA-small vs BERT-base 官方 dev set 對照：ChnSentiCorp 92.8 vs 94.7、LCQMC 86.7 vs 89.4、BQ Corpus 83.5 vs 86.0、XNLI 73.3 vs 77.8、CMRC2018 63.4/80.8 vs 65.5/84.5、DRCD 79.8/86.7 vs 83.1/89.9。",
+      "source": "ymcui/Chinese-ELECTRA 官方 repo README benchmark 表",
+      "url": "https://github.com/ymcui/Chinese-ELECTRA",
+      "relevance": "用 12M 參數換取句子分類任務約 2~3 個百分點的損失。若本專案能接受 76% → 約 73%，就能把模型壓到 12 MB 級別，首次載入體驗完全不同。這是報告裡「體積/精度 trade-off 曲線」的第二個資料點。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "瀏覽器端的硬性體積上限（ONNX Runtime 官方原文）：「The maximum size of a protobuf file is 2GB. If an ONNX model is larger than 2GB, it's usually generated with external data.」「WebAssembly has a memory limit of 4GB. This is the maximum amount of memory that a WebAssembly module can access because of the 32-bit addressing.」另註 Chrome 的 ArrayBuffer 上限約 0x7fe00000 bytes（約 2GB）。結論是超過 4GB 的模型無法在 ORT Web 執行。",
+      "source": "ONNX Runtime 官方文件 - Working with Large Models（Web）",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/large-models.html",
+      "relevance": "這些是理論天花板，本專案（單模型 < 400 MB）遠低於此，不是真正的瓶頸。報告可以用來說明「限制不是來自 WASM 定址，而是來自手機記憶體、下載時間與使用者耐心」。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ORT Web 多執行緒的實際條件（官方原文）：env.wasm.numThreads「The default value is 0, which means it will be determined by ONNX Runtime Web based on the environment. In browsers, it will be set to half of navigator.hardwareConcurrency or 4, whichever is smaller.」且「Only when the browser supports WebAssembly multi-threading and crossOriginIsolated mode is enabled, multi-threading will be enabled.」設為 1 可強制關閉多執行緒。另有 proxy worker 可把運算移到 Web Worker，但不能與 WebGPU EP 或 CSP 受限環境併用。",
+      "source": "ONNX Runtime 官方文件 - Env flags and session options（Web）",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html",
+      "relevance": "直接影響 PWA 架構：沒有 crossOriginIsolated 就是**單執行緒**，手機上延遲可能差 2~4 倍。而且 numThreads 上限被夾在 4，所以多核手機也吃不到全部核心。另外 proxy worker 與 WebGPU 互斥這點，決定了「WASM + proxy worker 避免卡 UI」和「WebGPU 加速」是兩套不同的實作，不能疊加。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "要開啟 crossOriginIsolated（即 SharedArrayBuffer / WASM threads）必須同時滿足 secure context 與 cross-origin isolated，透過 Cross-Origin-Opener-Policy 與 Cross-Origin-Embedder-Policy 兩個 HTTP response header 達成；可用 Window.crossOriginIsolated 檢查。SharedArrayBuffer 2018 年因 Spectre 被停用，2020 年以新安全模型重啟，2021-12 起 Baseline widely available。",
+      "source": "MDN Web Docs - SharedArrayBuffer（Security requirements 段）",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer",
+      "relevance": "對 PWA 是真實的部署成本：要設 COOP: same-origin + COEP: require-corp。副作用是所有跨來源資源（CDN 字型、Google Analytics、從 HF Hub 直抓模型）都必須帶 CORP/CORS header，否則會被擋掉。若模型從 huggingface.co 直載，要先確認其 CORS header 相容；否則應自架同源模型檔。這是報告的實作風險項。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "WebAssembly 固定寬度 SIMD（128-bit）在 Apple 平台自 Safari 16.4 起支援，WebKit 官方原文：「In WebAssembly, we've added support for 128-bit SIMD.」Safari 16.4 於 2023 年 3 月隨 iOS/iPadOS 16.4 釋出。同版本也加入「iOS and iPadOS 16.4 add support for Web Push to web apps added to the Home Screen.」",
+      "source": "WebKit 官方部落格 - WebKit Features in Safari 16.4",
+      "url": "https://webkit.org/blog/13966/webkit-features-in-safari-16-4/",
+      "relevance": "SIMD 是 WASM 跑 BERT 矩陣乘法的主要加速來源，iOS 16.4+（2023 年 3 月後的 iPhone）才有。報告的「支援裝置」段落應寫 iOS 16.4 / Safari 16.4 為實務下限。附帶好消息：同版本起 iOS 的 Home Screen PWA 可用 Web Push，本專案若想做通知功能是可行的。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "Safari 自 26 版起預設支援 WebGPU。ONNX Runtime 官方 WebGPU 文件原文仍寫「WebGPU is available out-of-box in latest versions of Chrome and Edge on Windows, macOS, Android and ChromeOS. It is also available in Firefox behind a flag and Safari Technology Preview.」；而 transformers.js v4.3.0 release notes 明確寫「This release adds structured output, three new model architectures, WebGPU support for Safari 26+」。",
+      "source": "ONNX Runtime 官方文件 - WebGPU EP；+ huggingface/transformers.js v4.3.0 release notes（GitHub API 實際抓取，published 2026-09-16）",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html",
+      "relevance": "iOS 上 WebGPU 可用，但要 Safari 26+ — 普及率遠低於 WASM。報告應寫：WebGPU 是漸進增強（progressive enhancement），不是基礎能力；偵測不到就退回 WASM。ORT 官方文件在 Safari 支援度上已落後於實際狀況，引用時要註明。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "W3C WebGPU 規格的 supported limits 預設值（從 spec HTML 直接解析）：maxBufferSize = 268435456 bytes（256 MiB）、maxStorageBufferBindingSize = 134217728 bytes（128 MiB）、maxUniformBufferBindingSize = 65536 bytes。",
+      "source": "W3C WebGPU 規格（Candidate Recommendation），§ Limits 表格",
+      "url": "https://www.w3.org/TR/webgpu/#limits",
+      "relevance": "這是 WebGPU 路線的硬限制：任何單一權重張量繫結到 storage buffer 時，baseline adapter 只保證 128 MiB。本專案 BERT 最大的單一張量是 embedding（21128×768×4 ≈ 62 MB fp32）仍在範圍內，所以不會踩到；但若未來改用更大詞彙或更大模型就要檢查。報告可用此說明「為什麼手機端不能靠 WebGPU 硬塞大模型」。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ONNX Runtime 官方對 Web 端選型的建議原文：WASM「This is the default CPU execution provider for ONNX Runtime Web. Use it for very small models or environments where GPU is not available.」WebGPU「This is the default GPU execution provider. Use it when the device has a decent GPU which supports WebGPU.」模型大小建議「Usually, the 'tiny' or 'small' versions of models are more commonly used in web applications.」",
+      "source": "ONNX Runtime 官方文件 - Performance diagnosis（Web）",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/performance-diagnosis.html",
+      "relevance": "官方對「模型該多大」只給了質性建議（用 tiny/small 版），沒有數字門檻。報告若要給 MB 數字，必須標明是自己的工程判斷，不能假託官方。這條可當「官方建議用小模型」的唯一可引用依據。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "Transformers.js 預設會用 Cache API 快取模型檔案：env.useBrowserCache「Whether to use Cache API to cache models. By default, it is true if available.」env.useWasmCache「Whether to pre-load and cache WASM binaries and the WASM factory (.mjs) for ONNX Runtime. Defaults to true when cache is available. This can improve performance and enables offline usage by avoiding repeated downloads.」cacheKey 預設 'transformers-cache'，另支援 useCustomCache / customCache（需實作 Web Cache API 的 match 與 put）。",
+      "source": "HuggingFace 官方文件 - Transformers.js API: env",
+      "url": "https://huggingface.co/docs/transformers.js/api/env",
+      "relevance": "直接支撐 PWA 的核心賣點：大檔案只需下載一次，之後離線可用。報告的「首次載入時間」應區分 cold start（需下載模型 + WASM binary）與 warm start（讀 Cache）。useWasmCache 也讓 ORT 的 .wasm/.mjs 不必重複下載，是真正離線的必要條件。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "瀏覽器儲存配額與驅逐規則：Chrome/Chromium 每個 origin 最高可達磁碟總量 60%；Safari（WebKit 瀏覽器 app）每 origin 約 60%、全瀏覽器上限 80%；macOS 14 / iOS 17 以前的舊版 Safari 初始配額為 1 GiB 並以權限提示要求更多。驅逐觸發條件包含儲存壓力（LRU）、超過瀏覽器總上限，以及「Proactive eviction（Safari only）- Origins with no user interaction in last 7 days」。只有 best-effort 的 origin 會被驅逐，透過 navigator.storage.persist() 取得 persistent 的 origin 不會因儲存壓力被清除。",
+      "source": "MDN Web Docs - Storage quotas and eviction criteria",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+      "relevance": "關鍵風險：在 iOS Safari 上，使用者若 7 天沒開這個 PWA，快取的模型可能被整個清掉 — 下次開啟又要重下 ~40~100 MB。因應做法寫進報告：(1) 呼叫 navigator.storage.persist() 申請持久化；(2) 引導使用者「加入主畫面」（MDN 指出 Home Screen/Dock 的 web app 享有瀏覽器級配額）；(3) UI 要能優雅處理「模型不在快取」的重新下載流程，不能假設只下載一次。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "Transformers.js 現況（npm registry 與 GitHub API 實際查詢）：最新版 @huggingface/transformers 4.3.0，發布於 2026-09-16，相依 onnxruntime-web 1.31.0-dev 與 onnxruntime-node 1.30.0（onnxruntime-web 正式版最新為 1.30.0，2026-09-14）。v4.0.0（2026-03-30）最大變更是「a new WebGPU Runtime, completely rewritten in C++」，官方稱與 ONNX Runtime 團隊合作在「~200 supported model architectures」上測試，且同一份 transformers.js 程式碼可在瀏覽器、Node、Bun、Deno 跑 WebGPU 加速。v4.3.0 加入 structured output、Safari 26+ WebGPU 支援、文件改版。",
+      "source": "npm registry API（registry.npmjs.org）+ GitHub Releases API（api.github.com/repos/huggingface/transformers.js/releases）實際查詢",
+      "url": "https://github.com/huggingface/transformers.js/releases",
+      "relevance": "專案成熟且活躍維護，可放心當 PWA 的推論層。官方定位原文「Transformers.js is designed to be functionally equivalent to Hugging Face's transformers python library」— 代表 Python 端的 tokenizer 行為（本專案的中文 BertTokenizer）可以在 JS 端對齊，這點對中文斷詞一致性很重要，但仍須實測驗證 tokenize 結果逐 token 相同。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "Transformers.js 官方原文：「Transformers.js uses ONNX Runtime to run models in the browser」，模型需先轉成 ONNX：「you can easily convert your pretrained PyTorch, TensorFlow, or JAX models to ONNX using 🤗 Optimum」。執行環境為預設的 CPU via WASM，以及 GPU via WebGPU（文件標為 experimental，用 { device: 'webgpu' } 啟用）。",
+      "source": "HuggingFace 官方文件 - Transformers.js index",
+      "url": "https://huggingface.co/docs/transformers.js/index",
+      "relevance": "本專案的 pipeline 確定為：fine-tuned safetensors checkpoint → optimum-cli export onnx → ORT 動態量化成 INT8 → 放 HF Hub 或自架同源靜態檔 → transformers.js 載入。注意 hfl/rbt3 等模型在 Hub 上**沒有** onnx/ 子目錄（我實際查過檔案清單只有 pytorch_model.bin / tf_model.h5 / flax），所以匯出這一步必須自己做，不能靠現成 ONNX。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "MDN 將 PWA 的核心技術明確列為：Web App Manifest（描述外觀、與 OS 整合）、Service Worker API（含 Cache API 做離線、FetchEvent 攔截請求、Background Sync/Periodic Sync/Background Fetch 做背景作業），以及 IndexedDB、Badging API、Notifications API、Web Share API 等周邊 API。",
+      "source": "MDN Web Docs, \"Progressive web apps\"（官方文件）",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps",
+      "relevance": "本專案 手機應用/web/ 下已有 manifest.json + sw.js + Cache API 的組合，正好對應 MDN 定義的最小 PWA 集合；技術報告可直接用 MDN 這一頁界定「什麼算 PWA」，不必引用二手部落格。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Service Workers 規格目前是 W3C Candidate Recommendation Draft（由 Web Applications Working Group 發布）；Web Application Manifest 則仍停留在 Working Draft，規格文件本身警告「this specification is not stable」、尚未進入 Candidate Recommendation 階段。",
+      "source": "W3C, \"Service Workers\"（CR Draft）與 W3C, \"Web Application Manifest\"（Working Draft）",
+      "url": "https://www.w3.org/TR/service-workers/",
+      "relevance": "寫技術報告時若要稱 PWA 為「標準化技術」要分開講：SW 已近定案，manifest 仍在變動中（這也解釋了為何各家對 display、icons、shortcuts 的支援度參差）。manifest 的 URL 為 https://www.w3.org/TR/appmanifest/。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Service Worker 只能在 secure context 執行：MDN 原文「their document is served over HTTPS, although browsers also treat http://localhost as a secure context」。",
+      "source": "MDN Web Docs, \"Service Worker API\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API",
+      "relevance": "部署時不能用 http 的內網或 file:// 開啟示範；只能走 HTTPS 託管（GitHub Pages/Netlify/Cloudflare Pages）或本機 localhost 測試。口試現場若用 IP 直連筆電會整個離線功能失效。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Chromium 系瀏覽器的「可安裝」條件（MDN 列舉）：HTML head 內 <link rel=\"manifest\">；manifest 需含 name 或 short_name、icons（必須包含 192px 與 512px）、start_url、display 或 display_override，且 prefer_related_applications 為 false 或不存在；網站需以 https（或 localhost/127.0.0.1）提供。",
+      "source": "MDN Web Docs, \"Making PWAs installable\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable",
+      "relevance": "現有 手機應用/web/manifest.json 已滿足 name/short_name/start_url/display/192+512 icons，條件齊備；唯一要確認的是 icon-192.png 與 icon-512.png 檔案真的存在（manifest 有宣告但 web/ 目錄下目前只見到 html/js/css/json），否則 Chrome DevTools 的 Manifest 頁會報 Installability 錯誤。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "iOS/iPadOS 的安裝路徑與 Android 不同：iOS 16.3 及更早只能用 Safari 安裝 PWA，iOS 16.4 起可從 Safari、Chrome、Edge、Firefox、Orion 的「分享」選單安裝；而 beforeinstallprompt 事件（自訂安裝按鈕、程式化叫出安裝提示）在 iOS 上不支援。",
+      "source": "MDN Web Docs, \"Making PWAs installable\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable",
+      "relevance": "不能只做一顆「安裝」按鈕就了事。iOS 使用者必須用圖文教學引導（分享→加入主畫面）；而下一條會說明，在 iOS 上「有沒有加到主畫面」直接決定模型快取會不會被砍，所以這段引導不是美觀問題而是功能問題。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "caniuse 的相容性表列出 Safari on iOS 自 11.3 起支援 Service Workers。",
+      "source": "caniuse.com, \"Service Workers\"",
+      "url": "https://caniuse.com/serviceworkers",
+      "relevance": "可在報告寫「iOS 自 11.3（2018）起即支援 SW」，涵蓋率上不構成障礙。注意 caniuse 的 Chrome for Android / Firefox for Android 欄位只顯示當前版本號，不能當作「首次支援版本」引用。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "iOS/iPadOS 16.4 才加入 Web Push，且官方明文只開放給「已加入主畫面的 web app」，一般 Safari 分頁瀏覽的網站無法請求推播權限；權限請求必須回應使用者的直接操作（例如點按 subscribe 按鈕）。",
+      "source": "WebKit Blog, \"Web Push for Web Apps on iOS and iPadOS\"（2023）",
+      "url": "https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/",
+      "relevance": "本專案是一次性判讀工具、不需要推播，所以這一條反而是「可以主動放棄的功能」——報告中可說明選擇 PWA 沒有犧牲本專案真正需要的能力。同時再次印證 iOS 把「加入主畫面」當成功能分水嶺。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "WebKit 的 ITP 會在「使用者 7 天未與該站互動」後刪除該站所有 script-writable 儲存，官方列出的清單包含 Indexed DB、LocalStorage、SessionStorage、Media keys，以及「Service Worker registrations and cache」。但官方同時明文豁免：「Web applications added to the home screen are not part of Safari and thus have their own counter of days of use」，其天數依該 web app 的實際使用重置，且「不預期」第一方資料被刪除（若被刪除請當成嚴重 bug 回報）。",
+      "source": "WebKit Blog, John Wilander, \"Full Third-Party Cookie Blocking and More\"（2020-03-24）",
+      "url": "https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/",
+      "relevance": "這是整個主題四最關鍵的一條。若 iOS 使用者只在 Safari 分頁裡開這個網址，7 天沒用就會連 Service Worker 註冊與 Cache 內容一起被清掉，幾十 MB 的 int8 ONNX 模型要重新下載一次；只有「加到主畫面」才被豁免。建議：(1) 首次載入即引導 iOS 安裝；(2) UI 顯示「已安裝／未安裝」狀態與快取是否存在；(3) 報告的限制章節要寫明這個 iOS 行為，這是離線優先設計的硬約束，不是實作疏失。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "各瀏覽器的 Cache Storage/總體儲存配額（MDN 官方數字）：Chrome 及 Chromium 系在 best-effort 與 persistent 模式下，單一 origin 最多可用總磁碟 60%；Firefox best-effort 是 min(總磁碟 10%, 10 GiB 的 site group limit)，取得 persistent 後可達磁碟 50%（上限 8 TiB）且不受 group limit；Safari 自 macOS 14 / iOS 17 起，瀏覽器類 app 每個 origin 約可用磁碟 60%、其他嵌入網頁內容的 app 約 15%，但「若使用者把網站存成主畫面或 Dock 上的 web app，則享有與瀏覽器相同的約 60%」。WebKit 另有總量上限：瀏覽器類 app 全部 origin 合計不得超過磁碟 80%，非瀏覽器 app 為 20%。",
+      "source": "MDN, \"Storage quotas and eviction criteria\"；WebKit Blog, \"Updates to Storage Policy\"（Safari 17）",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+      "relevance": "結論：容量完全不是瓶頸。即使 4 模型集成、每個 int8 約 100 MB，總共數百 MB 也遠低於任何現代手機的配額。報告不必再寫「受限於瀏覽器容量」；真正的限制是 iOS 的 eviction（上一條）與使用者願不願意等首次下載，不是上限數字。WebKit 文件 URL：https://webkit.org/blog/14403/updates-to-storage-policy/"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "資料驅逐（eviction）的三種情境：儲存空間壓力時採 LRU（最久未使用的 origin 先刪，且會跳過已取得 persistence 的 origin）；全站總量超出瀏覽器願意使用的空間時；以及「只有 Safari 會對不常使用的 origin 主動驅逐」（開啟跨站追蹤防護時，7 天內無使用者互動即刪除 script 建立的資料）。可用 navigator.storage.persist() 申請持久化，之後只有使用者自己從瀏覽器設定刪除才會被清掉。",
+      "source": "MDN, \"Storage quotas and eviction criteria\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria",
+      "relevance": "實作建議：在首次下載模型前先呼叫 navigator.storage.persist()，並用 navigator.storage.estimate() 顯示已用/可用空間給使用者看（也是「我沒有偷存東西」的透明度展示）。注意 persist() 對 iOS 的 ITP 7 天規則幫助有限，仍以「加到主畫面」為主要對策。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "MDN 將 StorageManager.persist() 標為 Baseline「Widely available」、自 2021 年 12 月起在各瀏覽器可用，且僅限 secure context、不可在 Web Worker 中呼叫。",
+      "source": "MDN Web Docs, \"StorageManager: persist() method\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist",
+      "relevance": "代表 persist() 可以安全呼叫、不需要做能力偵測分支（但仍應檢查回傳值）。另外「不可在 Worker 中呼叫」意味著要在主執行緒（app.js）而非 sw.js 裡申請。我未逐欄核對 Safari 的首次支援版本號，故不在報告中寫具體版本。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "在 Cache Storage 中存入 opaque response（即跨來源、mode: \"no-cors\" 的回應）會被大幅加計配額：Chrome 官方文件原文「even an opaque response of a few kilobytes will end up contributing around 7 megabytes towards your quota usage」。文件同時建議搭配 Workbox ExpirationPlugin 的 purgeOnQuotaError: true 以在超額時自動清理。",
+      "source": "Chrome for Developers / Workbox, \"Understanding storage quota\"",
+      "url": "https://developer.chrome.com/docs/workbox/understanding-storage-quota",
+      "relevance": "直接影響現有 sw.js：它會把 cdn.jsdelivr.net／unpkg 的回應放進 SHELL cache。每一個這類 opaque 回應都算 ~7 MB。更重要的是下一條指出它其實根本存不進去。最乾淨的解法是把 ort.min.js 與其 .wasm 檔自行託管在同源目錄下（同源回應不會被 padding，也不會變 opaque）。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "opaque response 的 status 固定為 0、body 為 null、ok 為 false（MDN 明列 Response.type 為 \"opaque\" 時 status: 0、body: null，headers 為空且不可變）。",
+      "source": "MDN Web Docs, \"Response: type property\"",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Response/type",
+      "relevance": "這在現有程式碼裡是個會讓離線直接失效的瑕疵：手機應用/web/index.html 用 <script src=\"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js\"> 載入 ORT，沒有 crossorigin 屬性，所以該請求的 mode 是 no-cors；手機應用/web/sw.js 的 CDN 分支做 const resp = await fetch(e.request); if (resp.ok) cache.put(...) —— opaque 回應的 ok 恆為 false，因此 ORT 引擎的 js 永遠不會被寫進 cache，離線時整個推論引擎載不進來（且 ORT 執行期還會再去 CDN 抓 .wasm，同樣抓不到）。修法二選一：在 script 標籤加 crossorigin=\"anonymous\" 讓它變成 CORS 請求，或（建議）把 ort.min.js 與 ort-wasm-simd-threaded.* 一併放進同源 model/ 或 vendor/ 目錄自行託管。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "ONNX Runtime Web 的多執行緒有硬性前置條件：官方文件稱「Only when the browser supports WebAssembly multi-threading and crossOriginIsolated mode is enabled, multi-threading will be enabled」；而 MDN 指出要使用 SharedArrayBuffer（WASM 多執行緒的基礎），文件必須同時是 secure context 且 cross-origin isolated（需 COOP/COEP 標頭），可用 crossOriginIsolated 屬性檢查。",
+      "source": "ONNX Runtime 官方文件 \"Env flags and session options\"；MDN \"SharedArrayBuffer\"",
+      "url": "https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html",
+      "relevance": "手機應用/web/inference.js 設定 ort.env.wasm.numThreads = min(hardwareConcurrency, 4)，但若託管在無法設 COOP/COEP 的靜態空間（如 GitHub Pages），crossOriginIsolated 為 false，實際只會跑單執行緒 —— 這會讓報告中的「手機推論延遲」數字與預期不符。建議在 UI/報告中印出 self.crossOriginIsolated 與實際 numThreads 作為實測前提；若要真的開多執行緒，需改用可設標頭的 Cloudflare Pages/Netlify，或採 coi-serviceworker 之類的 SW 注入標頭手法。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "GitHub Pages 無法自訂 HTTP 回應標頭（包含 Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy），這是 GitHub community 討論中長期存在的已知限制；常見解法是改用可設標頭的託管服務，或以 service worker 攔截請求補上標頭（如 coi-serviceworker 專案）。",
+      "source": "GitHub community discussions #13309 \"Allow setting COOP and COEP headers in Github Pages\"、#54257；未能在 GitHub 正式文件中找到明文陳述",
+      "url": "https://github.com/orgs/community/discussions/13309",
+      "relevance": "若打算用 GitHub Pages 當 demo 託管（最省事的選項），就要接受單執行緒 WASM 推論。這對 int8 的 3~6 層小模型（專案中有 hfl/rbt3、hfl/rbt6、electra-small）仍可接受，但 bert-base 級別單執行緒在中低階手機上會明顯變慢。建議報告的部署章節把「託管平台能不能設標頭」列為選型條件之一。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Transformers.js 的官方環境變數文件證實它預設就用 Cache API 快取模型：env.useBrowserCache「Whether to use Cache API to cache models. By default, it is true if available」；env.cacheKey 預設值為 'transformers-cache'；env.useWasmCache「Whether to pre-load and cache WASM binaries and the WASM factory (.mjs) for ONNX Runtime. Defaults to true when cache is available. This can improve performance and enables offline usage by avoiding repeated downloads」；env.customCache 需實作 Web Cache API 的 match 與 put。另外 Transformers.js 官方首頁標語為「Run Transformers directly in your browser, with no need for a server!」，並說明它「uses ONNX Runtime to run models in the browser」。",
+      "source": "Hugging Face 官方文件 Transformers.js — env API 與首頁",
+      "url": "https://huggingface.co/docs/transformers.js/en/api/env",
+      "relevance": "可當成「業界標準做法」的佐證：連 HuggingFace 官方的瀏覽器端推論庫也是用 Cache API 快取模型權重、並且特別把 ORT 的 WASM 二進位一起快取以支援離線。本專案 sw.js 的 cache-first 模型策略方向正確，但應該仿照 useWasmCache 的做法，把 ORT 的 wasm 檔明確納入預快取清單（目前 SHELL_FILES 只列了 html/js/css/json，沒有任何 wasm 或模型檔）。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "手機端的 WebGPU 已經不是「不穩定」：Chrome 121 起 WebGPU 在 Android 12 以上、搭載 Qualcomm 與 ARM GPU 的裝置預設啟用；Safari 26.0 正式在 iOS 26 / iPadOS 26 / macOS / visionOS 出貨 WebGPU，WebKit 官方文章更直接點名「Babylon.js, Three.js, Unity, PlayCanvas, Transformers.js, ONNX Runtime and others all work great in Safari 26.0」。",
+      "source": "Chrome for Developers, \"What's New in WebGPU (Chrome 121)\"；WebKit Blog, \"WebKit Features in Safari 26.0\"",
+      "url": "https://developer.chrome.com/blog/new-in-webgpu-121",
+      "relevance": "手機應用/web/inference.js 的註解寫「手機上 webgpu 支援還不穩定，先不啟用」已略過時（WebKit 官方點名 ORT 可用）。建議改為 executionProviders: ['webgpu', 'wasm'] 的漸進增強寫法並實測兩者延遲差異 —— 這正好能在報告裡貢獻一組有價值的實測數據。但保留 wasm 作為 fallback 仍然必要（舊 Android、iOS 25 及以下）。WebKit 文章 URL：https://webkit.org/blog/17333/webkit-features-in-safari-26-0/"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "WebAssembly 128-bit SIMD 自 Safari 16.4 起支援。",
+      "source": "WebKit Blog, \"WebKit Features in Safari 16.4\"",
+      "url": "https://webkit.org/blog/13966/webkit-features-in-safari-16-4/",
+      "relevance": "inference.js 設定 ort.env.wasm.simd = true；這條確認 iOS 16.4 以上的 iPhone 具備 SIMD，int8 量化模型的 WASM 推論才有合理速度。可在報告的「相容性下限」寫成：iOS ≥ 16.4 為建議版本（SIMD + Share 選單安裝 + Web Push 皆自此版起）。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "散佈成本的官方數字：Apple Developer Program 年費 99 USD（Enterprise 299 USD，價格依地區而異）；Google Play 開發者帳號為「US$25 one-time registration fee」。",
+      "source": "Apple Developer, \"Enrollment support\"；Google Play Console Help, \"Create a developer account\"",
+      "url": "https://developer.apple.com/support/enrollment/",
+      "relevance": "PWA 這條路的散佈成本是 0 元（自有網址即可），這是方案比較表裡最硬的量化差異。對一份學生專題／技術報告而言，99 USD/年的持續支出 + 需要 Mac 做 iOS 建置，本身就是選擇 PWA 的充分理由。Google Play 文件 URL：https://support.google.com/googleplay/android-developer/answer/6112435"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "審查時程的官方說法：Apple 稱平均「90% of submissions are reviewed in less than 24 hours」；Google Play 則表示部分 app 會進入延長審查，「review times of up to 7 days or longer in exceptional cases」。此外 2023-11-13 之後建立的新「個人」Google Play 開發者帳號，必須先完成封閉測試並滿足「a minimum of 12 testers who have been opted in continuously for at least 14 days」才能申請上架正式版（中途退出的測試者不計）。",
+      "source": "Apple Developer, \"App Review\"；Play Console Help, \"Publish your app\" 與新個人開發者帳號測試要求",
+      "url": "https://support.google.com/googleplay/android-developer/answer/14151465",
+      "relevance": "對一個有口試/繳交期限的專案，Google Play 的「12 名測試者連續 14 天」等於把首次上架時程推後至少兩週以上，幾乎排除了在截止前用 Play 散佈的可能。這是比較表裡「散佈成本」最具說服力的具體證據。Apple 審查頁 URL：https://developer.apple.com/distribute/app-review/"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "App Store 審查指引 4.2（Minimum Functionality）原文要求：「Your app should include features, content, and UI that elevate it beyond a repackaged website. If your app is not particularly useful, unique, or 'app-like,' it doesn't belong on the App Store.」4.2.2 另稱「Other than catalogs, apps shouldn't primarily be marketing materials, advertisements, web clippings, content aggregators, or a collection of links.」",
+      "source": "Apple, \"App Review Guidelines\"",
+      "url": "https://developer.apple.com/app-store/review/guidelines/",
+      "relevance": "如果走「用 WKWebView/Capacitor 把這個 PWA 包成 iOS App」的省力路線，恰好撞上 4.2 的 repackaged website 條款，有被拒的實質風險。反過來說，這一條正是報告中「為何不包成原生 App」的官方依據，比泛泛說「開發成本高」有力得多。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "審查指引 2.5.2 原文禁止 app「download, install, or execute code which introduces or changes features or functionality of the app」；但 4.7（Mini Apps, Mini Games, …, Plug-ins）明文允許「Apps may offer certain software that is not embedded in the binary, specifically HTML5 and JavaScript mini apps and mini games, streaming games, chatbots, and plug-ids」（原文為 plug-ins），並要求開發者對這些軟體負責。",
+      "source": "Apple, \"App Review Guidelines\" 2.5.2 與 4.7",
+      "url": "https://developer.apple.com/app-store/review/guidelines/",
+      "relevance": "若未來想在原生 App 內「首次啟動才下載模型權重」，2.5.2 與 4.7 之間的界線（權重是資料還是 code？）就是一個需要討論的風險點。而 PWA 路線完全不受這組條款管轄 —— 這是把「模型可熱更新」列為 PWA 優勢時應援引的依據。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "ONNX Runtime 官方安裝文件列出的 JavaScript 目標只有三個：ONNX Runtime Web（瀏覽器）、Node.js binding、ONNX Runtime for React Native；原生行動端提供 Android（Java/Kotlin、C/C++）與 iOS（C/C++、Objective-C）API。官方安裝頁完全沒有提到 Flutter 或 Dart。",
+      "source": "ONNX Runtime 官方文件 \"Install ONNX Runtime\"",
+      "url": "https://onnxruntime.ai/docs/install/",
+      "relevance": "方案比較的關鍵技術事實：若改走 React Native，Microsoft 官方有維護的 onnxruntime-react-native 可直接重用現有 .onnx 檔；若走 Flutter，則只能依賴第三方 FFI 綁定或改用 LiteRT/Core ML 另做一次模型轉換，工程風險明顯較高。對一個已經有 ONNX 匯出腳本（手機應用/scripts/export_onnx.py）的專案，這是「PWA > React Native > Flutter」的客觀排序理由。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "React Native 官方定位為「Learn once, write anywhere」，目標平台為 Android、iOS（社群另有 React Native Windows/macOS/Web），並強調「React primitives render to native platform UI, meaning your app uses the same native platform APIs other apps do」；Flutter 官方文件則以單一程式碼庫支援 Android、iOS、Windows、macOS、Linux、Web 六個平台，並以 platform channels 處理平台專屬程式碼。",
+      "source": "reactnative.dev 官方首頁；docs.flutter.dev \"Flutter fundamentals\"",
+      "url": "https://reactnative.dev/",
+      "relevance": "這兩條是方案比較表中「開發成本」欄的官方定性依據（跨平台單一碼庫 vs. 兩套原生）。但要誠實指出：兩者仍需各自的原生建置工具鏈（Xcode/Android SDK）與商店帳號，散佈成本與原生 App 相同，省下的只有 UI 開發成本 —— 對本專案（UI 極簡、核心價值在推論）省的那一塊恰好是最小的一塊。Flutter 文件 URL：https://docs.flutter.dev/get-started/fundamentals"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Firefox for Android 自 2023 年 12 月 14 日起開放一般擴充套件：Mozilla 官方公告「Starting December 14, 2023, extensions marked as Android compatible on addons.mozilla.org (AMO) will be openly available to Firefox for Android users」，launch 時約有 400+ 個擴充套件，且開發者必須主動在 AMO 標記為 Android 相容。Mozilla 的 Extension Workshop 另指出「Background service workers aren't supported on Firefox for Android」，並建議「use Manifest V2 for extensions targeting Firefox for Android」。",
+      "source": "Mozilla Add-ons Community Blog（2023-11-28）；Mozilla Extension Workshop, \"Developing extensions for Firefox for Android\"",
+      "url": "https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-for-android/",
+      "relevance": "手機擴充套件路線在 Android 上技術可行但受眾極小（需使用者改用 Firefox for Android），且 MV3 background service worker 不支援意味著要為行動版維護一份 MV2 程式碼。對「在社群平台輸入框旁即時判讀」這種理想情境雖誘人，但投入產出比遠低於 PWA。Mozilla 公告 URL：https://blog.mozilla.org/addons/2023/11/28/open-extensions-on-firefox-for-android-debut-december-14-but-you-can-get-a-sneak-peek-today/"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Safari web extensions 自 iOS 15 / iPadOS 15 起支援，但必須隨一個 app 一起散佈（「Safari web extensions are distributed with an app」），因此走 App Store；Apple 提供 Safari web extension packager，可不經 Mac/Xcode 直接用 App Store Connect 打包散佈，支援把擴充套件放在 macOS、iOS、visionOS 或 Mac Catalyst app 內。",
+      "source": "Apple Developer 文件 \"Distributing your Safari web extension\" 與 \"Packaging and distributing Safari web extensions with App Store Connect\"；Apple Tech Talk 110148",
+      "url": "https://developer.apple.com/documentation/safariservices/distributing-your-safari-web-extension",
+      "relevance": "決定性結論：擴充套件路線在 iOS 上無法規避 App Store 審查與 99 USD 年費（因為擴充套件必須包在 app 內），所以它不但受眾更小、還保留了原生 App 的全部散佈成本。可在報告中直接寫「擴充套件在 iOS 上同時承擔 PWA 的開發模式與原生 App 的散佈負擔，是最差的組合」。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "W3C Privacy Principles 已於 2025 年 5 月 15 日成為 W3C Statement（「a document that, after extensive consensus-building, is endorsed by W3C and its Members」）。其 §2.2 Data Minimization 要求「Sites, user agents, and other actors should restrict the data they transfer to what's either necessary to achieve their users' goals or aligns with their users' wishes and interests」；§2.6 另要求「Whenever possible, processors should work with data that has been de-identified」。誠實註記：該文件並未明文把「在裝置端運算」列為一項原則，它規範的是「傳輸最小化」而非運算位置。",
+      "source": "W3C Statement, \"Privacy Principles\"（2025-05-15）",
+      "url": "https://www.w3.org/TR/privacy-principles/",
+      "relevance": "這是目前最有權威性、可引用的 Web 隱私規範論述。論證方式要正確：裝置端推論之所以符合規範，是因為它把「需要傳輸的資料量」降到零，恰好是 §2.2 傳輸最小化的極端情形 —— 而不是因為規範直接要求 on-device。這樣寫既有力又不過度宣稱。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "GDPR 第 5(1)(c) 條（data minimisation）原文：「adequate, relevant and limited to what is necessary in relation to the purposes for which they are processed ('data minimisation')」。",
+      "source": "Regulation (EU) 2016/679 (GDPR) Art. 5(1)(c)，經 gdpr-info.eu 條文頁查證；EUR-Lex 官方 HTML 頁面本次無法由工具擷取內容",
+      "url": "https://gdpr-info.eu/art-5-gdpr/",
+      "relevance": "方法論章節可用來支撐：既然判讀所需的運算可完全在裝置完成，把使用者輸入的言論上傳伺服器就不是「necessary」，因此裝置端推論是比「伺服器 API + 不留存紀錄」更強的合規設計。若報告要求引用官方來源，正式引註應標 Regulation (EU) 2016/679, Art. 5(1)(c), OJ L 119, 4.5.2016。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "台灣個人資料保護法第 5 條：「個人資料之蒐集、處理或利用，應尊重當事人之權益，依誠實及信用方法為之，不得逾越特定目的之必要範圍」；第 6 條則將「病歷、醫療、基因、性生活、健康檢查及犯罪前科」之個人資料列為原則上不得蒐集、處理或利用的特種個資，僅在法律明文規定、公務機關執行法定職務並有適當安全維護措施、當事人自行公開或已合法公開、學術研究之統計目的、經當事人書面同意等例外情形下才得為之。",
+      "source": "全國法規資料庫，個人資料保護法（法規代碼 I0050021）",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=I0050021",
+      "relevance": "這是本專案最切題的在地法律依據，而且比 GDPR 更強：使用者輸入的言論往往涉及「某人是否犯罪／某人的犯罪前科」之指控，一旦上傳伺服器就可能踩到第 6 條的特種個資規範；裝置端推論讓這個問題根本不發生（沒有蒐集行為）。建議在報告的「設計決策」章節以第 5 條必要範圍原則 + 第 6 條犯罪前科特種個資，作為選擇 on-device 推論的法律論證，並對應到 index.html 已有的「文字不上傳任何伺服器」宣稱。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Hugging Face 官方對瀏覽器端推論的定位即是「Run Transformers directly in your browser, with no need for a server!」，並說明「Transformers.js uses ONNX Runtime to run models in the browser」；ONNX Runtime 官方 Web 教學亦把 client-side 推論的好處列為速度、離線可用與資料留在裝置上的隱私保障。",
+      "source": "Hugging Face Transformers.js 官方文件首頁；ONNX Runtime 官方 Web 教學",
+      "url": "https://huggingface.co/docs/transformers.js/en/index",
+      "relevance": "可當作「裝置端推論是主流工程做法、不是本專案的權宜之計」的佐證，支撐報告中對 PWA + ONNX Runtime Web 架構的技術選型敘述。註記：ORT 教學頁對「隱私」的措辭我只取得摘要而非逐字原文，引用時建議只引 Transformers.js 的那句逐字標語（https://onnxruntime.ai/docs/tutorials/web/）。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Apple 原本計畫在 iOS 17.4 於歐盟移除「加入主畫面」的 Home Screen web app 能力，後因開發者與使用者反映而撤回，並在開發者支援文件中表示會「continue to offer the existing Home Screen web apps capability in the EU」，隨 iOS 17.4 在 2024 年 3 月初恢復既有功能。",
+      "source": "多家媒體（Engadget、9to5Mac、Trusted Reviews）引述 Apple 開發者支援文件更新；我未能在 developer.apple.com/support/dma-and-apps-in-the-eu/ 頁面中定位到這段文字，故標為 likely",
+      "url": "https://www.engadget.com/apple-backtracks-on-plans-to-get-rid-of-web-apps-on-iphones-in-the-eu-195232177.html",
+      "relevance": "值得在「PWA 的平台風險」一節提一句：PWA 的安裝能力完全掌握在平台方手上，2024 年初這次事件顯示 Apple 曾單方面準備關閉此能力。這是一個誠實的風險陳述，但因我無法用 Apple 官方頁面逐字佐證，報告若要引用請改引 Apple 官方支援頁並自行再確認原文，或在文中註明係媒體轉述。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "刑法第309條僅規定「公然侮辱人者，處拘役或九千元以下罰金」（第2項以強暴犯之者1年以下），構成要件不含任何「事實」要素；第310條第1項則要求「意圖散布於眾，而指摘或傳述足以毀損他人名譽之『事』」，第2項「散布文字、圖畫犯前項之罪者」即本專案所稱加重誹謗（2年以下、3萬元以下罰金）。",
+      "source": "全國法規資料庫，中華民國刑法第309條、第310條（法務部官方資料庫，查證於2026-10-04）",
+      "url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=310",
+      "relevance": "兩罪的法定區別就是「有無指摘具體之事」。本專案的二分類在法條層面確實有可辨識的語言信號（可驗證的事實陳述 vs 抽象評價），這支持任務本身並非無意義；但也意味標籤的正確定義是「該言論是否為可檢驗真偽的事實指摘」，而非「這句話多難聽」。建議在報告中以此作為任務合法性的論證起點。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "憲法法庭113年憲判字第3號判決（2024-04-26宣示）認定刑法第309條第1項合憲，但採「合憲性限縮」：所處罰者限於「依個案之表意脈絡，表意人故意發表公然貶損他人名譽之言論，已逾越一般人可合理忍受之範圍」，且須再「權衡該言論對他人名譽權之影響，以及該言論是否有益於公共事務之思辯、是否屬文學藝術表現形式、是否具學術或專業領域正面價值」，於個案足認名譽權應優先於言論自由時始成罪。判決同時認定「侮辱」一詞不違法律明確性原則。",
+      "source": "憲法法庭113年憲判字第3號判決（公然侮辱罪案一），2024-04-26；中央社報導〈公然侮辱罪合憲但限縮範圍 憲法法庭：故意貶損他人名譽才構成〉",
+      "url": "https://www.cna.com.tw/news/asoc/202404260274.aspx",
+      "relevance": "這是本專案最大的倫理與技術風險來源：現行合憲的公然侮辱罪判準是明文要求「個案表意脈絡＋雙階段權衡」的多因素裁量，而本專案的 ML 輸入只有一句言論文本（dataset 的言論內容欄），缺少雙方關係、是否被挑釁、是否屬公共事務思辯等憲法要求的權衡因子。因此 App 在原理上無法複製現行法律判準，只能複製「過去被起訴且定罪的句子長得像什麼」。報告與 App 文案都不應宣稱判斷「構成什麼罪」，而應降級為「文本風格與過往判決案例的相似度」。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "憲法法庭112年憲判字第8號判決（2023-06-09宣示）認定刑法第310條及第311條合憲，並對第310條第3項作補充性合憲解釋：涉及公共利益而無關私德之誹謗言論，表意人縱不能證明言論為真實，若「於言論發表前確經合理查證程序，依所取得之證據資料，客觀上可合理相信其言論內容為真實」，即屬不罰。是否符合合理查證應依個案權衡名譽權與言論自由。",
+      "source": "憲法法庭112年憲判字第8號判決，2023-06-09；公視新聞網報導",
+      "url": "https://news.pts.org.tw/article/640843",
+      "relevance": "決定性的方法論限制：誹謗罪是否成立取決於「表意人發表前有沒有做查證」這個行為事實，完全不存在於留言文本中。任何只讀文本的模型都無法判斷誹謗罪的核心免責要件。這應在報告的「模型能力邊界」一節明確寫出，並支持 App 不輸出罪名結論、只輸出風險提示的設計決策。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "司法院釋字第509號（2000年）在112年憲判字第8號之前即已確立：行為人雖不能證明言論內容為真實，但依其所提證據資料認為行為人有「相當理由確信其為真實」者，即不能以誹謗罪相繩，將舉證負擔由「證明言論真實」降為「有相當理由確信真實」。此標準常被比附於美國 New York Times v. Sullivan（1964）的 actual malice 原則。",
+      "source": "司法院釋字第509號（2000年）；天下雜誌與關鍵評論網等二手評析（未取得大法官解釋官方頁面原文查證）",
+      "url": "https://www.cw.com.tw/article/5095187",
+      "relevance": "說明本專案 dataset 中的「無罪」標籤有很大一部分可能是因第310條第3項／釋字509號的查證免責而不罰，而非因為言論本身不像誹謗。若把這些判決當成文本層面的負樣本訓練，模型會學到錯誤的語言關聯。建議在 clean_dataset.py 的下游分析中把「無罪」原因（真實性抗辯 / 合理查證 / 不構成要件 / 告訴不合法）分開統計。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "刑法第314條規定「本章之罪，須告訴乃論」，即妨害名譽及信用罪章（含309、310條）全部為告訴乃論之罪，須被害人提出告訴且得於第一審辯論終結前撤回。",
+      "source": "全國法規資料庫，中華民國刑法第314條",
+      "url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=314",
+      "relevance": "這是資料選擇偏誤的制度性原因：是否進入判決書資料庫，取決於有人願意告、且沒有在調解後撤回。資料集因此系統性缺少「被害人選擇不告」與「告了之後和解撤回」的言論，而這兩類在實務上數量龐大。報告寫選擇偏誤時應直接引用此制度機制，而非只談抽象統計概念。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "憲法法庭113年憲判字第5號判決（2024-05-24宣示）就刑法第140條：「侮辱公務員罪」部分在限於「當場侮辱、基於妨害公務之主觀目的、且足以影響公務執行」範圍內合憲；「侮辱職務罪」部分則違反憲法第11條言論自由保障，自判決宣示之日起失其效力。",
+      "source": "憲法法庭113年憲判字第5號判決，2024-05-24；中央社報導〈楊蕙如侮辱大阪處判有罪確定 憲法法庭發回高院〉",
+      "url": "https://www.cna.com.tw/news/asoc/202405240207.aspx",
+      "relevance": "具體的標籤漂移證據：2024-05-24 之前以「侮辱職務罪」定罪的判決，其罪名在現行法下已不存在。若爬取的妨害名譽語料中混入第140條案件（網路上辱罵機關／職務的留言很常見），這些標籤已失效。建議在 dataset 清理階段明確檢查並標記第140條相關案件，並在報告中以此論證「法律標籤不是穩定的 ground truth」。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "行政院會於2026-01-29通過法務部擬具之刑法部分條文修正草案（妨害名譽章），並與司法院會銜函請立法院審議。草案新增以網路或深偽方式犯公然侮辱者處2年以下有期徒刑、併科20萬元以下罰金；以網路或深偽方式犯誹謗及妨害信用罪者處3年以下有期徒刑、拘役或科或併科30萬元以下罰金；一般誹謗罰金由1萬5千元提高至10萬元以下，加重誹謗由3萬元提高至20萬元以下；並配合113年憲判字第5號修正侮辱公務員罪為限於「足以影響公務執行者」。截至報導時僅送立法院審議，尚未三讀。",
+      "source": "中央社〈政院通過刑法修法 網路公然侮辱最重2年徒刑20萬罰金〉2026-01-29；行政院新聞頁（115-01-29）",
+      "url": "https://www.cna.com.tw/news/aipl/202601290187.aspx",
+      "relevance": "若此草案通過，本專案的標籤空間會直接改變：網路言論將出現「網路／深偽公然侮辱」這個新的加重類型，而本專案全部訓練資料恰好都是網路言論。這代表模型即使今天準確，法律一變標籤定義就過時。報告的「未來工作／風險」一節應把此草案列為已知的法規變動風險，App 也應顯示模型訓練資料的法律版本時點。立法進度請在交付前再查證一次。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "台灣律師法第127條第1項規定：「無律師證書，意圖營利而辦理訴訟事件者，除依法令執行業務者外，處一年以下有期徒刑，得併科新臺幣三萬元以上十五萬元以下罰金。」構成要件包含三項：無律師證書、意圖營利、辦理訴訟事件（實務認為包含撰寫民刑事及行政訴訟書狀、代為出庭等訴訟行為）。",
+      "source": "法律百科文章引述律師法第127條第1項條文；嘗試直接取得全國法規資料庫律師法頁面失敗（pcode 查詢錯誤），條文文字未經官方資料庫原文確認",
+      "url": "https://legis-pedia.com/article/1127",
+      "relevance": "台灣的 UPL 門檻比美國窄：規範對象是「意圖營利」且「辦理訴訟事件」。一個免費、不代撰書狀、不代理出庭、僅提供文本分析的 PWA，從條文要件看落在規範之外的可能性較高。但這是條文要件的描述，不是法律意見——報告中應如此表述，且若未來導入付費或產生書狀範本功能，風險評估需重做。條文原文建議交付前再以官方資料庫查證一次。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "美國 FTC 於2025年2月對 DoNotPay（自稱「世界第一個機器人律師」）作成最終命令：支付 193,000 美元金錢救濟、須通知2021至2023年間訂閱者本案、且在無充分證據支持前不得廣告其服務表現等同真人律師。FTC 指控的核心事實是該公司從未測試其「AI 律師」是否達到真人律師水準，也未聘請律師驗證其法律功能的品質與正確性。",
+      "source": "美國聯邦貿易委員會（FTC）新聞稿〈FTC Finalizes Order with DoNotPay...〉2025年2月；ABA Journal 報導",
+      "url": "https://www.ftc.gov/news-events/news/press-releases/2025/02/ftc-finalizes-order-donotpay-prohibits-deceptive-ai-lawyer-claims-imposes-monetary-relief-requires",
+      "relevance": "這是本專案最直接可類比的執法前例，而且其違法點不是技術品質而是「宣稱」與「未驗證」。本專案已有實測 76%/86% 的數字與可重現的 notebook，在 substantiation（實證支持）上處於比 DoNotPay 好的位置；但必須確保公開文案中的每一個準確率數字都標明是哪個資料切分、哪種顆粒度（句子層 vs 判決層）、以及該資料的來源限制，絕不可簡化成「準確率86%」。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "英格蘭與威爾斯的 Legal Services Act 2007 第12條與附表2僅將六項活動列為「保留法律活動」（reserved legal activities）：出庭權、訴訟進行、保留文書活動、遺產管理活動、公證活動、宣誓之administration。提供法律意見或協助本身並不在保留範圍內，故不需授權即可提供。",
+      "source": "Legal Services Act 2007 s.12 及 Schedule 2；Legal Services Board 與 ICLR 之說明頁（未直接取得 legislation.gov.uk 原文）",
+      "url": "https://legalservicesboard.org.uk/for-the-public/reserved-legal-activities",
+      "relevance": "顯示各國 UPL 規範差異極大：美國多數州把「法律意見」本身納管，英國則不納管，台灣以「意圖營利＋辦理訴訟事件」為界。若本專案的 PWA 要在不同地區上架，不能用單一免責聲明應付。報告可用此對比論證「法規不確定性本身就是設計保守的理由」。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "EU AI Act（Regulation (EU) 2024/1689）附件三第8點(a)所列的高風險司法類 AI，明文限於「intended to be used by a judicial authority or on their behalf to assist a judicial authority in researching and interpreting facts and the law and in applying the law to a concrete set of facts, or to be used in a similar way in alternative dispute resolution」。前言第61點並明確排除「purely ancillary administrative activities that do not affect the actual administration of justice in individual cases」。",
+      "source": "EU AI Act Annex III point 8 與 Recital 61（artificialintelligenceact.eu 條文對照頁）",
+      "url": "https://artificialintelligenceact.eu/annex/3/",
+      "relevance": "反直覺但重要的結論：本專案若是面向一般民眾的消費端 App，並非「由司法機關或其代理者使用」，因此不落入附件三第8點，不自動成為 EU AI Act 高風險系統。報告不應誤寫成「法律領域 AI 一律屬高風險」——那是常見的錯誤敘述。若未來把模型賣給法院或檢方輔助審理，風險等級才會跳升為高風險並觸發第三章全部義務。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "EU AI Act 第86條（Right to explanation of individual decision-making）規定：受到部署者基於附件三高風險 AI 系統輸出所作決定影響之人（第2點所列系統除外），若該決定產生法律效果或以其認為對健康、安全、基本權有不利影響之方式顯著影響其本人，有權向部署者取得「clear and meaningful explanations of the role of the AI system in the decision-making procedure and the main elements of the decision taken」。",
+      "source": "EU AI Act Article 86（artificialintelligenceact.eu 條文頁）",
+      "url": "https://artificialintelligenceact.eu/article/86/",
+      "relevance": "可解釋性義務的法源與觸發條件：須同時滿足（a）屬附件三高風險、（b）有部署者據以作出決定、（c）該決定產生法律效果。司法類屬第8點而非被排除的第2點，故一旦落入高風險即受此條拘束。對本專案的實務意義是：只要產品定位停留在「使用者自己看、不由第三方據以作決定」，就不觸發第86條；但若日後被平台用來自動下架留言，就會觸發。這是產品定位與法律義務的直接連動，值得寫成報告的一張決策表。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "EU AI Act 第50條第1項對所有「intended to interact directly with natural persons」的 AI 系統（不限聊天機器人）課予透明性義務：提供者須確保系統之設計與開發使相關自然人被告知其正在與 AI 系統互動。此義務不以高風險分類為前提。",
+      "source": "EU AI Act Article 50(1)（artificialintelligenceact.eu 條文頁）",
+      "url": "https://artificialintelligenceact.eu/article/50/",
+      "relevance": "即使本專案不是高風險，仍有一項低門檻但明確的義務：介面必須讓使用者知道判斷是 AI 做的。這給 App UI 一個具體、可引用的設計要求（例如結果卡片上固定標示「此結果由裝置端 AI 模型產生」），而不是只靠一段使用者不會讀的服務條款。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "EU AI Act 第113條經 Digital Omnibus on AI（Regulation (EU) 2026/1744，2026-07-08通過、2026-07-24刊登於官方公報、2026-07-27生效）修正後，第三章第1、2、3節對依第6條第2項及附件三分類為高風險之 AI 系統，自2027-12-02起適用；對依第6條第1項及附件一分類者自2028-08-02起適用（原本的預設適用日為2026-08-02）。",
+      "source": "EU AI Act Article 113 現行條文（artificialintelligenceact.eu）；Regulation (EU) 2026/1744 刊登與生效日期見 Hunton、Cuatrecasas、ertico 等法律事務所分析（未直接取得 EUR-Lex 原文）",
+      "url": "https://www.artificialintelligenceact.eu/article/113/",
+      "relevance": "時程上的好消息與風險並存：附件三高風險義務已延後至2027-12-02，本專案近期沒有歐盟合規急迫性。但也意味報告若引用「2026年8月起適用」會是過時資訊。寫技術報告時務必註明所引法規版本與查證日期（本次查證日2026-10-04），因為 AI 法規在本專案生命週期內仍在高速變動。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "台灣「人工智慧基本法」已於2026-01-14公布施行，全文20條，中央主管機關為國家科學及技術委員會。第4條基本原則包含透明與可解釋，官方英譯為「The outputs of AI shall be accompanied by appropriate disclosures or labeled to facilitate the assessment of potential risks and understanding of their impact on relevant rights and interests, thereby enhancing the trustworthiness of AI.」；第5條規定「If an AI product or system is identified as a high-risk application by a central competent authority for the relevant industry in consultation with the Ministry of Digital Affairs, it shall come with advisory notices or warnings.」；第17條規定政府應就高風險 AI 應用明確責任歸屬及歸責條件，並建立救濟、補償或保險機制。",
+      "source": "全國法規資料庫（法務部）官方英文版 Artificial Intelligence Basic Act, pcode H0160093，公布日2026-01-14",
+      "url": "https://law.moj.gov.tw/ENG/LawClass/LawAll.aspx?pcode=H0160093",
+      "relevance": "這是對本專案直接適用的本國法，比 EU AI Act 更相關，而且是全新法律（公布不到一年），報告引用它會明顯提升時效性與在地性。第4條的「輸出應附適當揭露或標示」直接支持在每個判斷結果旁強制顯示模型資訊與限制說明；第5條則是潛在風險：高風險認定權在中央目的事業主管機關會商數位發展部，不是開發者自己說了算，故本專案無法單方面主張自己不是高風險。具體條號與高風險認定的子法尚待主管機關訂定，建議交付前再查證。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "legal tech 業界處理免責的標準做法可由 LegalZoom 服務條款具體化：明示「LegalZoom is not a law firm or an attorney, may not perform services performed by an attorney, and its forms or templates are not a substitute for the advice or services of an attorney」、不成立律師與委任人關係或特權、且明示「at no time do we review your answers for legal sufficiency, draw legal conclusions, provide legal advice, opinions or recommendations about your legal rights, remedies, defenses, options, selection of forms, or strategies, or apply the law to the facts of your particular situation」。",
+      "source": "LegalZoom Terms of Service / Terms of Use（官方網站條款頁）",
+      "url": "https://www.legalzoom.com/terms_of_service.html",
+      "relevance": "這給出一套可直接改寫套用的免責語言結構，其中「不就你的具體事實適用法律（do not apply the law to the facts of your particular situation）」這句正好精準描述本專案該有的自我定位，也與 113憲判3 要求個案脈絡權衡的發現互相呼應。建議 App 的免責聲明採這四段式結構：非律師事務所／不成立委任關係／不提供法律結論／不就你的具體事實適用法律，並加上一句本專案特有的資料來源限制說明。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "台灣消費者保護法第22條規定：「企業經營者應確保廣告內容之真實，其對消費者所負之義務不得低於廣告之內容。企業經營者之商品或服務廣告內容，於契約成立後，應確實履行。」",
+      "source": "全國法規資料庫，消費者保護法第22條",
+      "url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=J0170001&flno=22",
+      "relevance": "在台灣，把「準確率76%／86%」寫進 App 商店說明或宣傳頁，可能構成廣告內容而產生拘束力，且免責聲明不得使義務低於廣告內容——也就是說，不能一邊宣傳高準確率、一邊用小字免責聲明免除責任。這與 FTC 對 DoNotPay 的 substantiation 要求方向一致。實務建議：對外文案只寫任務性質與限制，準確率數字留在技術報告並完整標註評測條件。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "司法院建置的量刑資訊系統與量刑趨勢建議系統在定位上僅供法官參考，不得據以剝奪或限制法官依個案具體情狀妥適量刑之裁量權；「刑事案件量刑及定執行刑參考要點」要求法院妥適行使裁量權並參考該等系統與量刑考量因素參考表。",
+      "source": "司法院官方網站量刑資訊系統相關說明頁與刑事案件量刑及定執行刑參考要點（經二手整理，未逐字核對要點原文）",
+      "url": "https://www.judicial.gov.tw/tw/cp-83-57186-1ef46-1.html",
+      "relevance": "本國司法機關自己做法律領域 AI／統計輔助工具時採取的定位就是「參考、不取代裁量」。本專案可直接援引此先例作為設計準則與報告論述：連司法院的官方系統都只敢定位為參考資訊，一個學生專案的消費端 App 更沒有理由輸出結論式罪名判斷。這是對台灣審查者最有說服力的類比。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "美國律師協會倫理與職業責任常設委員會於2024-07-29發布 Formal Opinion 512「Generative Artificial Intelligence Tools」，涵蓋能力、保密、與客戶溝通、僅提出有理由之主張、對法院之誠實、監督責任與收費等義務，並要求律師對所用技術的能力與限制有合理理解、且律師本人仍對提供適任法律服務負最終責任。",
+      "source": "ABA Standing Committee on Ethics and Professional Responsibility, Formal Opinion 512 (July 29, 2024)；National Law Review 與 Inside Global Tech 等報導（未直接取得 ABA 原始 PDF）",
+      "url": "https://natlawreview.com/article/american-bar-association-issues-formal-opinion-use-generative-ai-tools",
+      "relevance": "提供一個「人類在環、責任不可外包」的規範範本。對本專案的意涵是：若目標使用者包含律師或法律工作者，產品應明確定位為輔助檢索／初篩工具，並在輸出中保留讓人類複核的資訊（例如相似判決原文連結），而不是只給一個標籤。這也可作為報告中「負責任部署」小節的制度性依據。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "本專案資料面的問題在統計學上的標準名稱是「樣本選擇偏誤」（sample selection bias）。Heckman 在 Sample Selection Bias as a Specification Error, Econometrica, Vol. 47, No. 1 (January 1979), pp. 153–161 中將使用非隨機選取樣本估計行為關係所生的偏誤，刻畫為一般的設定誤差或「遺漏變數」偏誤，並提出兩階段一致估計量。Heckman 於2000年獲諾貝爾經濟學獎。",
+      "source": "James J. Heckman, \"Sample Selection Bias as a Specification Error\", Econometrica 47(1): 153–161 (1979)",
+      "url": "https://www.econometricsociety.org/publications/econometrica/1979/01/01/sample-selection-bias-specification-error",
+      "relevance": "回答了任務中「這在統計上叫什麼」的問題：正式名稱是 sample selection bias，且 Heckman 的關鍵洞見是它等價於遺漏變數偏誤——遺漏的正是「這則留言為什麼會被告、被起訴、被判決」這個選擇機制。報告可以此論證：除非能對選擇機制建模（而本專案拿不到未起訴留言的資料），否則模型係數本身就是有偏的，不只是樣本數不足的問題。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "法律領域特有的對應理論是 Priest 與 Klein 的訴訟案件選擇效應：George L. Priest & Benjamin Klein, \"The Selection of Disputes for Litigation\", Journal of Legal Studies, Vol. 13, No. 1 (1984), pp. 1–55。核心主張為進入審判的案件並非全體潛在爭議的隨機樣本，因為某些案件比其他案件更容易和解，故已訴訟之爭議具系統性偏誤。該文是法律經濟學引用次數最高的論文之一。",
+      "source": "George L. Priest & Benjamin Klein, \"The Selection of Disputes for Litigation\", Journal of Legal Studies 13(1): 1–55 (1984)",
+      "url": "https://chicagounbound.uchicago.edu/jls/vol13/iss1/2/",
+      "relevance": "這是把統計概念接回法律語境最有力的引用，而且在台灣脈絡下特別貼切：妨害名譽是告訴乃論，雙方往來調解撤回的比例極高，進入判決書的案件因此是「調解失敗且當事人堅持到底」的極端尾端。報告在談資料限制時應同時引 Heckman（統計機制）與 Priest & Klein（法律機制），比只談 class imbalance 深刻得多。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "台灣妨害名譽案件的起訴率極低：2014至2016年間共有28,073件妨害名譽案件偵查終結，僅5,745件起訴（約20.5%），即約八成未進入起訴程序。該統計由司法改革國是會議第五分組委員林志潔於2017-03-30第三次會議提出，該分組並據此建議妨害名譽罪除罪化、改由民事途徑救濟。",
+      "source": "新頭殼 newtalk 報導司法改革國是會議第五分組第三次會議（2017-03-30）引述林志潔委員統計；未能取得法務部統計處原始表格查證",
+      "url": "https://newtalk.tw/news/view/2017-03-30/83775",
+      "relevance": "這是可量化本專案選擇偏誤規模的關鍵數字：判決書資料庫只覆蓋約兩成被偵查的妨害名譽案件，而被偵查的案件本身又只是全部網路爭吵的極小子集。因此模型估計的其實是 P(罪名 | 文本, 已起訴且經判決)，而非使用者真正想問的 P(罪名 | 文本)。對 App 的誤用風險極具體：有八成機率，一則在資料集裡看起來「像有罪」的留言在真實程序中根本不會被起訴，App 若顯示高風險會造成不必要的恐慌，甚至被用來威嚇他人（「我這截圖 AI 說你構成誹謗」）。建議在報告中把這個數字做成核心論點，並於交付前嘗試以法務部較新統計更新。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "缺乏真正負樣本（沒有「未被起訴的正常留言」）的學習設定在機器學習上稱為 positive-unlabeled learning（PU learning）。Jessa Bekker & Jesse Davis, \"Learning from positive and unlabeled data: a survey\", Machine Learning (2020) 為該領域綜述。理論上的關鍵限制是類別先驗（class prior）不可識別：缺少標籤既可解釋為正類先驗機率低、也可解釋為標註頻率低，必須加上額外假設（例如 SCAR、case-control 取樣假設）才能識別。Elkan & Noto (2008) 常被引為類別先驗估計的奠基工作。",
+      "source": "Jessa Bekker & Jesse Davis, \"Learning from positive and unlabeled data: a survey\", Machine Learning (2020), arXiv:1811.04820；類別先驗不可識別性見 PU learning 文獻（Elkan & Noto 2008 之確切標題與出處未逐一查證）",
+      "url": "https://arxiv.org/abs/1811.04820",
+      "relevance": "給出第二個精確的技術名稱，並指出一個無法用更多資料解決的理論障礙：就算爬完全部判決書，也無法從「只有被定罪案例」的資料中識別出「一則隨機留言構成犯罪的機率」。這直接證明 App 不能顯示任何形式的「構成犯罪機率 XX%」，因為那個機率在數學上不可識別。這是報告中技術上最紮實的倫理論據。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "法律判決預測（Legal Judgment Prediction, LJP）領域已有明確針對此類偏誤的命名：Jaehoon Jeong & Jay-Yoon Lee, \"OBJECTION! Lawyer Agents Mitigate Guilty Bias in Legal Judgment Prediction\"（arXiv:2609.02158，2026-09-02）指出 LJP 模型訓練於以檢方視角撰寫的文件、且資料集對有罪結果有嚴重標籤不平衡，導致模型無批判地接受起訴敘事，作者稱之為 guilty bias，並以對抗式辯護律師 agent 在推論時提出辯方論點來降低誤判有罪。",
+      "source": "Jaehoon Jeong & Jay-Yoon Lee, \"OBJECTION! Lawyer Agents Mitigate Guilty Bias in Legal Judgment Prediction\", arXiv:2609.02158 (2026-09-02)",
+      "url": "https://arxiv.org/abs/2609.02158",
+      "relevance": "與本專案的資料管線高度相關：crawler_defamation.py 的高品質路徑 extract_incident_table() 抽取的正是「檢察官起訴書附表」逐字嵌入判決的內容，即最純粹的檢方視角敘事。這意味本專案的最佳品質資料同時是偏誤最重的資料。報告應誠實揭露這點，並可將該論文的對抗式做法列為未來改進方向（例如同時餵入辯方抗辯段落）。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "Medvedeva, M., Wieling, M. & Vols, M., \"Rethinking the field of automatic prediction of court decisions\", Artificial Intelligence and Law 31: 195–212 (2023) 區分三類被混為一談的任務：outcome identification（從已含結果的文件中辨識結果）、outcome-based judgement categorisation（依結果對判決分類）、outcome forecasting（對尚未作出的判決做預測），並指出必須先理解所用法律資料才能確定能執行哪一項任務。相關綜述（Medvedeva 與 McBride 審閱171篇聲稱預測法院判決的論文）發現絕大多數論文其實並未在解決預測問題。",
+      "source": "Medvedeva, Wieling & Vols, \"Rethinking the field of automatic prediction of court decisions\", Artificial Intelligence and Law 31: 195–212 (2023)",
+      "url": "https://research.rug.nl/en/publications/rethinking-the-field-of-automatic-prediction-of-court-decisions/",
+      "relevance": "本專案在這個分類裡屬於 outcome-based judgement categorisation（依已判定結果對判決文本分類），而不是 outcome forecasting。這是報告中最該誠實標定的一句話：76%/86% 的數字衡量的是「能不能從判決書文字回推該判決的罪名」，不是「能不能預測一則新留言會被判什麼」。App 的使用情境恰恰是後者，而本專案沒有任何實驗支持後者。這是整份報告誠實性的試金石。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "Sayash Kapoor, Peter Henderson & Arvind Narayanan, \"Promises and pitfalls of artificial intelligence for legal applications\"（arXiv:2402.01656, 2024）主張「AI 將重塑法律專業」的說法缺乏實證支持，並將法律任務分為資訊處理、創作／推理／判斷、以及對未來的預測三類，核心結論是最有可能改變專業樣貌的任務恰恰是最難評估的，因而特別容易產生對 AI 能力的過度樂觀。",
+      "source": "Sayash Kapoor, Peter Henderson & Arvind Narayanan, \"Promises and pitfalls of artificial intelligence for legal applications\", arXiv:2402.01656 (2024)",
+      "url": "https://arxiv.org/abs/2402.01656",
+      "relevance": "可作為報告「為何要克制宣稱」的綱領性引用，且作者具高可信度（Princeton，AI Snake Oil 作者）。對本專案最貼切的一句是：越接近真實應用價值的任務，評測越不可信。這支持在報告中補一節「我們的評測不能支持什麼」，明確列出 held-out accuracy 無法外推的情境。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "台灣個人資料保護法第6條將「犯罪前科」與病歷、醫療、基因、性生活、健康檢查併列為原則上不得蒐集、處理或利用之特種個人資料，僅在法律明文規定、公務機關執行法定職務並有適當安全維護、當事人自行公開或其他已合法公開、學術研究並去識別化、協助公務機關執行法定職務、當事人書面同意等例外情形下才得為之。",
+      "source": "全國法規資料庫，個人資料保護法第6條",
+      "url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=I0050021&flno=6",
+      "relevance": "本專案資料集來自判決書，內含具名被告的犯罪前科資訊（dataset 的平台帳號、言論內容欄位甚至可能含真實姓名與社群帳號）。雖然司法院裁判書查詢系統屬已合法公開之個人資料而有例外適用空間，但若要公開釋出資料集或把原文片段嵌入 App，應先做去識別化（移除人名、帳號、告證編號）。這是資料治理面必須在報告中交代的一項，也與台灣AI基本法第4條的隱私保護與資料治理原則相接。建議在 clean_dataset.py 後增加一個去識別化步驟作為公開版本的前提。"
+    }
+  ],
+  "rejected": [
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "claim": "Cui et al. 的 LJP 綜述分析了 6 種語言的 31 個 LJP 資料集並說明其建構流程，整理了 4 大類共 14 個評估指標，回顧了 3 種語言的 12 個法律領域預訓練模型，並指出 3 個主要研究方向。LJP 資料集被歸為四類任務：court view generation、law articles、charge prediction、prison term prediction。另有 Zhong et al. 的 ACL 2020 綜述從「法律專業人員偏好規則與符號方法、NLP 研究者偏好資料驅動與嵌入方法」的對立視角整理 LegalAI 的歷史、現況與未來方向。",
+      "source": "Junyun Cui, Xiaoyu Shen, Feiping Nie, Zheng Wang, Jinglong Wang, Yulong Chen (2022). A Survey on Legal Judgment Prediction: Datasets, Metrics, Models and Challenges. arXiv:2204.04859；Haoxi Zhong, Chaojun Xiao, Cunchao Tu, Tianyang Zhang, Zhiyuan Liu, Maosong Sun (2020). How Does NLP Benefit Legal System: A Summary of Legal Artificial Intelligence. ACL 2020 (2020.acl-main.466)",
+      "why": "【來源存在性】兩筆來源都真實存在，書目資訊逐字核對無誤。\n- arXiv:2204.04859 抓取結果：標題「A Survey on Legal Judgment Prediction: Datasets, Metrics, Models and Challenges」，作者 Junyun Cui, Xiaoyu Shen, Feiping Nie, Zheng Wang, Jinglong Wang, Yulong Chen，2022-04-11 提交，與引用完全一致。另已把 PDF 下載並用 pdftotext 轉成全文核對內文（非只看摘要）。\n- https://aclanthology.org/2020.acl-main.466/ 正常開啟，為 Zhong, Xiao, Tu, Zhang, Liu, Sun「How Does NLP Benefit Legal System: A Summary of Legal Artificial Intelligence」，ACL 2020 主會議論文，與引用一致。\n\n【主張逐項核對】\n✅ 「31 個 LJP 資料集、6 種語言、說明建構流程」— 摘要原文：\"we analyze 31 LJP datasets in 6 languages, present their construction process\"。\n✅ 「4 大類共 14 個評估指標」— 摘要原文：\"we summarize 14 evaluation metrics under four categories\"；內文 §4 確認四類為 text classification / classification+regression / classification+generation / text generation。\n✅ 「3 種語言的 12 個法律領域預訓練模型」— 摘要原文：\"we review 12 legal-domain pretrained models in 3 languages\"。\n✅ 「3 個主要研究方向」— 摘要原文：\"highlight 3 major research directions for LJP\"。\n❌ 「LJP 資料集被歸為四類任務：court view generation、law articles、charge prediction、prison term prediction」— 這一項不成立，而且方向正好相反。論文 §2.2 原文點名批評「法條／罪名／刑期」三分法「has limited coverage of LJP tasks, such as neglecting pro or con decisions」，然後提出以「3 個屬性」（type of tasks、type of legal systems、type of law domains）為軸的新分類法；其 main tasks 是 5 項（多了 plea judgment），單任務資料集章節也是 5 節（§3.1.1 Article、§3.1.2 Charge、§3.1.3 Prison Term、§3.1.4 Plea Judgment、§3.1.5 Court View），再加 §3.2 Multi-Task、§3.3 PLM 資料集。論文 Fig. 6 列出的 LJP output 型別更有 7 種（Articles、Charges、Plea judgments、Element answers、Prison terms、Fact snippets、Court View）。論文中的「四類」只出現在評估指標，疑似被誤植成任務分類。\n✅ Zhong et al. 的部分完全正確：摘要原文即為 \"Legal professionals often think about how to solve tasks from rule-based and symbol-based methods, while NLP researchers concentrate more on data-driven and embedding methods. In this paper, we introduce the history, the current state, and the future directions of research in LegalAI.\"，與主張所述的對立視角與「歷史／現況／未來方向」三段結構逐字相符。\n\n【結論】exists=true；但因為任務分類那一句與來源實際內容不符（且是該論文刻意反駁的說法，不只是數字小錯），依「來源存在但沒有支持這個主張就標 false」的判準，claim_accurate=false。只要把那句改成「以 3 個屬性建立分類法、main tasks 含 5 項（法條推薦、罪名預測、刑期預測、court view 生成、plea judgment）」，整段引用即可成立。",
+      "corrected": "兩筆書目本身完全正確，不需更換來源：\n(1) Junyun Cui, Xiaoyu Shen, Feiping Nie, Zheng Wang, Jinglong Wang, Yulong Chen (2022). \"A Survey on Legal Judgment Prediction: Datasets, Metrics, Models and Challenges.\" arXiv:2204.04859 (v1, 2022-04-11，標註 \"Preprint submitted to Elsevier\")。\n(2) Haoxi Zhong, Chaojun Xiao, Cunchao Tu, Tianyang Zhang, Zhiyuan Liu, Maosong Sun (2020). \"How Does NLP Benefit Legal System: A Summary of Legal Artificial Intelligence.\" Proceedings of the 58th Annual Meeting of the ACL (ACL 2020), pp. 5218–5230. https://aclanthology.org/2020.acl-main.466/ （URL 可正常開啟）。\n\n需要修正的是主張內容，不是來源。「LJP 資料集被歸為四類任務：court view generation / law articles / charge prediction / prison term prediction」應改寫為：\n\nCui et al. 明確「反對」只切成法條、罪名、刑期這種窄分類（§2.2 原文：「In many research, LJP tasks are divided into three subtasks: the decision of applicable law articles, charges, and penalty terms. However... this classification method has limited coverage of LJP tasks, such as neglecting pro or con decisions.」），改提出含「3 個屬性」的新分類法：type of tasks（main tasks / auxiliary tasks）、type of legal systems（common law / civil law）、type of law domains（刑事／民事／行政）。其 main tasks 共「5 項」：article recommendation、charge prediction、prison term prediction、court view generation、plea judgment；auxiliary tasks 另含 fact snippets extraction、attribute prediction、element answers。單任務資料集章節也相應是 5 節（§3.1.1–3.1.5：Article / Charge / Prison Term / Plea Judgment / Court View），外加 §3.2 多任務資料集與 §3.3 預訓練語言模型資料集。\n「四類」在該論文中指的是「評估指標」的四大類（§4：text classification；text classification + regression；text classification + generation；text generation），不是任務或資料集的分類，主張很可能把這兩者混為一談。"
+    },
+    {
+      "topic": "主題二：中文短文本分類、類別不平衡、與有雜訊標籤的學習（妨害名譽罪名分類專案文獻回顧）",
+      "claim": "CAIL2018 是首個大規模中文法律判決預測資料集，收錄中國最高人民法院公布的 260 萬餘件刑事案件，三個子任務為預測相關法條、罪名、刑期；共 601 隊、1,144 人、269 個單位參賽。基線結果呈現極端的「高 accuracy、低 macro-recall」落差：罪名預測的 accuracy 達 94.0%（TFIDF+SVM）、94.3%（FastText）、97.6%（CNN），但 macro-precision 僅 73.9% / 50.9% / 37.0%，macro-recall 更低至 56.2% / 39.7% / 21.4%。論文結論是現有模型預測判決結果仍是挑戰，刑期尤其困難。",
+      "source": "Xiao et al., \"CAIL2018: A Large-Scale Legal Dataset for Judgment Prediction\", arXiv:1807.02478 (2018)，已讀 ar5iv 基線表格",
+      "why": "實際下載 arXiv PDF 並以 pymupdf 抽取全文逐項核對，未憑印象判斷。\n\n【來源存在】arXiv:1807.02478 真實存在，標題、作者、年份、URL 全部正確，僅有 v1（2018-07-04 提交），共 4 頁。摘要逐字包含 \"the first large-scale Chinese legal dataset for judgment prediction\"、\"more than 2.6 million criminal cases published by the Supreme People's Court of China\"、\"applicable law articles, charges, and prison terms\"、\"it is still a challenge for current models to predict the judgment results of legal cases, especially on prison terms\"。故 exists=true。\n\n【基線數字全部精確命中】從 PDF 原始文字抽出 Table 2，欄位順序為 Charges / Relevant Articles / Terms of Penalty，罪名（Charges）欄位為第一組三個數字：\nFastText 94.3 / 50.9 / 39.7；TFIDF+SVM 94.0 / 73.9 / 56.2；CNN 97.6 / 37.0 / 21.4。\n與主張所述 accuracy 94.0%(TFIDF+SVM)、94.3%(FastText)、97.6%(CNN)，macro-precision 73.9/50.9/37.0，macro-recall 56.2/39.7/21.4 完全一致，連欄位歸屬都正確（未誤抄法條或刑期欄）。「高 accuracy、低 macro-recall」的詮釋也與論文 §3.3 原文一致：\"current models can achieve considerable results on the accuracy of charges prediction and relevant law articles prediction. However, the results of MP and MR show that LJP is still a huge challenge due to the lack of training data and imbalance issue.\"（此句並直接以「imbalance issue」歸因，對「類別不平衡」主題特別有用）。\n\n【唯一瑕疵：參賽規模數據誤植來源】對全文 grep \"601|1,144|1144|269|team|participan|organiz\" 僅命中作者機構行（如 Peking University、Chinese Academy of Sciences），無任何參賽統計。合理：該文於競賽舉行前發表，第 34 行明言資料「will be released after the CAIL competition」。\n進一步下載姊妹論文 arXiv:1810.05851 \"Overview of CAIL2018: Legal Judgment Prediction Competition\"（Zhong et al., 6 頁），其摘要原文確為 \"CAIL2018 has attracted several hundreds participants (601 teams, 1, 144 contestants from 269 organizations).\" 完全吻合主張數字。\n\n【判定】依判準「來源存在但沒有支持這個主張 → claim_accurate=false」，由於聲稱來源 arXiv:1807.02478 不支持其中「601 隊 / 1,144 人 / 269 單位」這一組具體數據，故 claim_accurate=false。但須說明這是「引用歸屬錯誤（misattribution）」而非「捏造數據」——數字本身真實存在，只是出自同一團隊的另一篇競賽總結論文；此主張約 90% 的內容（資料集描述、三子任務、九個基線數字、結論）皆逐字精確無誤。修正只需把參賽規模一句改引 arXiv:1810.05851 即可。",
+      "corrected": "主要來源正確且存在：Chaojun Xiao, Haoxi Zhong, Zhipeng Guo, Cunchao Tu, Zhiyuan Liu, Maosong Sun, Yansong Feng, Xianpei Han, Zhen Hu, Heng Wang, Jianfeng Xu, \"CAIL2018: A Large-Scale Legal Dataset for Judgment Prediction\", arXiv:1807.02478 (2018-07-04, 僅 v1, 共 4 頁)。該文確實支持：首個大規模中文 LJP 資料集、260 萬餘件最高人民法院刑事案件、三子任務（法條/罪名/刑期）、Table 2 全部九個基線數字、以及「仍是挑戰、刑期尤其困難」的結論。\n\n但「601 隊、1,144 人、269 個單位參賽」不在 arXiv:1807.02478 中（全文檢索 601/1,144/269/team/participant/organization 只命中作者單位；該文發表於競賽前，文中說資料「will be released after the CAIL competition」）。此數據的正確來源為同系列的競賽總結論文：Haoxi Zhong, Chaojun Xiao, Zhipeng Guo, Cunchao Tu, Zhiyuan Liu, Maosong Sun, Yansong Feng, Xianpei Han, Zhen Hu, Heng Wang, Jianfeng Xu, \"Overview of CAIL2018: Legal Judgment Prediction Competition\", arXiv:1810.05851 (2018-10-13)，其摘要原文：\"CAIL2018 has attracted several hundreds participants (601 teams, 1,144 contestants from 269 organizations).\"\n\n建議修正方式：將參賽規模一句改引 arXiv:1810.05851，其餘（資料集描述與基線表格）維持引用 arXiv:1807.02478，即成為完全正確的雙引用。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "ONNX Runtime Web 的 WebGPU EP 官方運算子支援清單共 109 筆，其中**不包含** MatMulInteger 也不包含 DynamicQuantizeLinear（我用 grep 計數：兩者各 0 筆命中）。清單裡有的量化相關運算子是 DequantizeLinear、MatMulNBits、GatherBlockQuantized。",
+      "source": "microsoft/onnxruntime 官方 repo：js/web/docs/webgpu-operators.md（main 分支，實際抓取並 grep 計數）",
+      "why": "來源真實存在（blob 與 raw 皆 HTTP 200），且是 ONNX Runtime 官方自動產生的 WebGPU（JSEP）運算子支援表。四個子主張中三個完全成立、一個數字錯誤：\n\n成立：\n1. 清單中**沒有** MatMulInteger（grep -ci = 0 命中）。\n2. 清單中**沒有** DynamicQuantizeLinear（grep -ci = 0 命中）。\n3. 量化相關運算子確實就是 DequantizeLinear（ai.onnx 10-12,13-18,19-20,21+）、MatMulNBits（com.microsoft 1+）、GatherBlockQuantized（com.microsoft 1+），且沒有其他量化運算子（連 QuantizeLinear 都沒有）。\n\n不成立：\n4. 「共 109 筆」錯誤——實際是 108 筆。109 是誤把表頭列 `| Operator | Opset | Comments |` 算成一筆運算子（`grep -c '^| [A-Z]'` 恰為 109）。而且追查該檔 commit 歷史，筆數軌跡是 106（2024-12）→ 107（2026-07-22 加 HardSwish）→ 108（2026-07-29 加 DFT），從未等於 109，所以也不能用「抓取時點不同」來解釋。\n\n因為主張是以「我實際 grep 計數」的精確數字形式提出，而該數字與來源實際內容不符，故標為 claim_accurate=false。不過要說明：這是 off-by-one 的計數瑕疵，主張想支撐的技術結論（ORT Web 的 WebGPU EP 不支援 MatMulInteger / DynamicQuantizeLinear，因此 dynamic INT8 量化在 WebGPU 上會掉回 CPU/wasm；WebGPU 能吃的是 4-bit 區塊量化的 MatMulNBits 這條路）是正確的，只要把 109 改成 108 即可引用。\n\n另一個值得在文中補註的細節：這份檔案涵蓋的是 JSEP 版 WebGPU EP 的運算子清單（檔頭明寫由 `../script/generate-webgpu-operator-md.ts` 自動產生、請勿手改）；ONNX Runtime 另有 C++ 原生 WebGPU EP，其運算子覆蓋範圍不由這份文件描述。",
+      "corrected": "來源存在且正確：microsoft/onnxruntime, `js/web/docs/webgpu-operators.md`（main 分支）\n- blob URL https://github.com/microsoft/onnxruntime/blob/main/js/web/docs/webgpu-operators.md → HTTP 200\n- raw URL https://raw.githubusercontent.com/microsoft/onnxruntime/main/js/web/docs/webgpu-operators.md → HTTP 200, 5570 bytes, 120 行\n\n正確的數字應為 **108 筆運算子**，不是 109。實測（awk 取表格第一欄、排除 header 與分隔列）：108 筆，去重後仍 108 筆（無重複）。109 是把 Markdown 表頭列 `| Operator | Opset | Comments |` 一起算進去的結果（`grep -c '^| [A-Z]'` 剛好 = 109，這應該就是原始計數方式的 off-by-one）。\n\n歷史版本佐證（同一檔案的 commit 歷史，確認從未出現過 109 筆）：\n- c19617a (2024-12-04, Add GatherND) → 106 筆\n- cfaf942 (2026-07-22, Add HardSwish) → 107 筆\n- 3eda902 (2026-07-29, Add DFT，即目前 main) → 108 筆\n\n其餘主張經 grep 確認無誤：`grep -ci MatMulInteger` = 0、`grep -ci DynamicQuantizeLinear` = 0；`grep -i quant` 僅命中 `| DequantizeLinear | ai.onnx(10-12,13-18,19-20,21+) |` 與 `| GatherBlockQuantized | com.microsoft(1+) |`，另有 `| MatMulNBits | com.microsoft(1+) |`（亦無 QuantizeLinear、無 DynamicQuantizeMatMul）。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "BERT 類模型 INT8 量化的精度損失有官方驗證表：Intel Neural Compressor 的 validated model list（ONNX Runtime 欄位）顯示 BERT 系列文本分類任務 INT8 vs FP32 的 accuracy ratio 多落在 ±1% 內。具體列：BERT base MRPC(static) 89.56% vs 90.42%（-0.95%）；BERT base SST-2(static) 91.97% vs 92.32%（-0.37%）；MiniLM L12 H384 MRPC(qlinearops) 90.13% vs 90.97%（-0.93%）；DistilBERT base uncased SST-2(qlinearops) 90.71% vs 91.06%（-0.38%）；BERT base MRPC(integerops) 85.78% vs 86.03%（-0.28%）。同表 x86 CPU 吞吐加速 1.6×–3.6×。",
+      "source": "intel/neural-compressor，docs/source/validated_model_list.md（v2.6 tag，實際抓取並解析 HTML 表格）",
+      "why": "來源確實存在：https://github.com/intel/neural-compressor/blob/v2.6/docs/source/validated_model_list.md 可正常抓取（我用 curl 取 raw 檔並以 Python 解析 HTML 表格逐列比對），v2.6 tag 下確有該檔，且確有 §1.5「ONNX Models with ONNX Runtime 1.17.1」驗證表，欄位為 INT8 / FP32 / Accuracy Ratio[(INT8-FP32)/FP32] / INT8 throughput / FP32 throughput / Performance Ratio。\n\n主張的核心結論完全成立：ONNX Runtime 表中 BERT 家族文本分類任務 36 列裡有 34 列 accuracy ratio 在 ±1% 內，吞吐加速區間 1.57x–3.55x，與「±1% 內」「1.6x–3.6x」相符；硬體也確為 x86（Xeon Platinum 8480+）。\n\n但五個具體列中有兩個被錯誤歸屬：「BERT base MRPC (static) 89.56% vs 90.42%」與「BERT base SST-2 (static) 91.97% vs 92.32%」數字雖逐字正確，卻出自 §1.2 PyTorch Torch 2.2.1+cpu PTQ 表（第 529-536、559-566 列），不在 ONNX Runtime 表內；\"static\" 是 PyTorch 的量化模式名稱，ONNX Runtime 表只有 qlinearops / qdq / integerops。而且 ONNX Runtime 1.17.1 表中完全沒有 BERT base SST-2 這個模型。引用自稱「ONNX Runtime 欄位」且「實際抓取並解析 HTML 表格」，顯然把兩個框架的表混用了——對於 on-device / ONNX Runtime Web 這個主題，PyTorch IPEX static PTQ 的精度結果不能代表 ONNX Runtime 的結果，這個錯置具實質意義，故 claim_accurate 標 false（屬可修正的歸屬錯誤，非捏造；三列正確、兩列需改列或改標註）。",
+      "corrected": "來源存在且正確：intel/neural-compressor，v2.6 tag，docs/source/validated_model_list.md（已實際抓取 raw 檔並解析 HTML 表格，共 2808 行）。URL 可用。\n\n但引用把兩個不同框架的表格混在一起了。該文件的 §1.5「ONNX Models with ONNX Runtime 1.17.1」只用 qlinearops / qdq / integerops 三種模式標籤；\"static\" 是 §1.2「PyTorch Models with Torch 2.2.1+cpu in PTQ Mode」的模式標籤。\n\n逐列查核：\n✅ 正確（確實在 ONNX Runtime 1.17.1 表內，數字逐字相符）\n- BERT base MRPC (integerops) 85.78% vs 86.03%，ratio -0.28%，throughput 728.48 vs 222.35 = 3.28x（原檔第 1797 列）\n- MiniLM L12 H384 uncased MRPC (HuggingFace, qlinearops) 90.13% vs 90.97%，-0.93%，2.05x（第 1917 列）\n- DistilBERT base uncased SST-2 (HuggingFace, qlinearops) 90.71% vs 91.06%，-0.38%，3.14x（第 1937 列）\n\n⚠️ 數字正確但來源欄位錯置（屬 PyTorch PTQ 表，非 ONNX Runtime 表）\n- 「BERT base MRPC (static) 89.56% vs 90.42% (-0.95%)」→ 實際出處是 §1.2 PyTorch Torch 2.2.1+cpu PTQ 表（第 529-536 列），performance ratio 2.30x。ONNX Runtime 表中的 BERT base MRPC 三列都是 85.78% / 86.03%。\n- 「BERT base SST-2 (static) 91.97% vs 92.32% (-0.37%)」→ 同樣出自 PyTorch PTQ 表（第 559-566 列），2.26x。ONNX Runtime 1.17.1 表中根本沒有 BERT base SST-2 這一列。\n\n建議改法：若要維持「ONNX Runtime 欄位」的說法，把那兩列換成真實的 ONNX RT 列，例如\n- BERT base cased MRPC (HuggingFace, qlinearops) 90.21% vs 90.42%，-0.23%，2.06x\n- MiniLM L6 H384 uncased SST-2 (HuggingFace, qlinearops) 89.45% vs 90.14%，-0.76%，1.94x\n或把 static 兩列明確標註為「PyTorch PTQ 表」。\n\n聚合數字查核：\n- 「accuracy ratio 多落在 ±1% 內」成立：ONNX RT 1.17.1 表中 BERT 家族 NLP 共 36 列，34/36 在 ±1% 內；例外為 Roberta base MRPC (qdq) -1.91%、BART large MRPC (integerops) +1.28%。\n- 「x86 CPU 吞吐加速 1.6x–3.6x」成立：BERT 家族列的 performance ratio 區間為 1.57x（DistilBERT base MRPC qdq）～3.55x（BERT base uncased MRPC integerops）。整表含 CV 模型則為 1.55x～5.29x。\n- 硬體確為 x86：文件開頭「System summary: Test by Intel on 3/18/2024. 1-node, 1x Intel(R) Xeon(R) Platinum 8480+ @3.8GHz, 56 cores/socket」，benchmark 設定為 1 socket / 4 cores per instance / 14 instances / batch size 1。"
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "claim": "本專案目前的集成架構在手機端不可行（本地檔案實測）：ml/01~04 與 06~09 的 model.safetensors 各為 390.2 MiB，05/10 的 lawformer 為 481.8 MiB。4 模型句子層級集成 = 4 × 390.2 MiB ≈ 1.52 GiB（fp32）；按實測 3.97× INT8 壓縮比換算仍約 4 × 98 MB ≈ 393 MB，且需同時載入 4 個 session 進記憶體。相對地 exp3 已有的 M2_rbt3 checkpoint 僅 146.8 MiB（INT8 推算約 37 MB）、M1_electra_small 93.7 MiB（24 層 / hidden 256，INT8 推算約 24 MB）。",
+      "source": "本專案本地檔案實測（find ml -name model.safetensors），壓縮比引用上述 HuggingFace 實測 3.97×",
+      "why": "來源確實存在：這不是捏造的論文或壞掉的 URL，而是可直接複驗的本地檔案，我用 find + ls 逐一量過，所有檔案大小主張都精確成立（390.2 / 481.8 / 146.8 / 93.7 MiB 全部吻合到小數第一位），「24 層 / hidden 256」在 config.json 得到證實，「4 模型句子層級集成」在 ensemble_sentence.json（n_members=4）與 run_binary_push.py 得到證實，且 4 個成員確實都是 base 尺寸 backbone，所以用 ml/01~04、06~09 的 390.2 MiB 當代理值是合理且claim中已誠實說明的（B4~B7 的 checkpoint 本身已不在磁碟上，exp3/runs 下只剩 M1/M2/M3）。4 × 390.2 MiB = 1560.8 MiB = 1.524 GiB，「≈1.52 GiB（fp32）」算得對。\n\n但 claim_accurate 判 false，原因是claim中一個承載結論的數字來源標錯且查無實據：claim 說「按實測 3.97× INT8 壓縮比換算」並把 3.97× 歸給「上述 HuggingFace 實測」。實際上 (a) 本專案自己的 ONNX 匯出實測是 3.84×（手機應用\\model\\model_meta.json 的 compression_ratio，以及 _figures_data.json、export_onnx.py 的計算式三處一致）；(b) 「3.97」在整個 repo grep 不到任何一筆；(c) 我實際 fetch 了 HuggingFace Optimum 的量化官方文件，裡面沒有 3.97× 這個數字，只有 NF4 的 75% memory compression（=4×）。換言之 3.97× 既不是本地實測值、也在所引的 HF 文件中找不到，屬於誤植或錯誤歸因，而由它推導出的 393 MB / 37 MB / 24 MB 三個數字都受影響（正確值為 406 MB / 38 MB / 24.4 MB）。\n\n另有一處次要不精確：claim 稱「本專案目前的集成架構」為 4 模型句子層級，但依 ml\\進度報告.ipynb 與 ensemble_judgment.json，專案最終／最佳架構是「判決層級 2 類 3 模型集成」（acc 0.8558，正是上一個 commit「從 45.7% 推到 85.6%」的主角），4 模型句子層級集成（acc 0.7615）在 notebook 中被描述為「句子層級的實務上限」而非最終架構。若以 3 模型計則為 3 × 390.2 MiB ≈ 1.14 GiB。\n\n結論上這些偏差都不改變claim的核心判斷（base 模型多路集成在手機端不可行，而 M1/M2 這類小模型可行）——方向性結論是穩固的，誤差幅度約 3%，但既然指示要求「寧可標 false 也不要放過捏造的引用」，而 3.97×「實測」確實是一個查無來源的數字，故標 claim_accurate=false。",
+      "corrected": "主要來源（本地檔案）存在且可驗證，但壓縮比的來源標註有誤。\n\n正確來源應標為：\n1. 檔案大小 — `find ml -name model.safetensors` 實測（已逐一核對，全部正確）：\n   - C:\\Users\\User\\PycharmProjects\\機器學習\\ml\\01~04、06~09\\checkpoints\\*\\model.safetensors = 409,103,292~409,110,068 bytes = 390.15~390.16 MiB（≈390.2 MiB ✓）\n   - ml\\05_lawformer\\checkpoints\\checkpoint-7080\\model.safetensors = 505,181,580 bytes = 481.78 MiB；ml\\10_lawformer_merged\\checkpoints\\checkpoint-4648 = 505,175,428 bytes = 481.77 MiB（≈481.8 MiB ✓）\n   - ml\\exp3_accuracy\\runs\\M2_rbt3\\checkpoints\\checkpoint-509\\model.safetensors = 153,919,872 bytes = 146.79 MiB（≈146.8 MiB ✓）\n   - ml\\exp3_accuracy\\runs\\M1_electra_small\\checkpoints\\checkpoint-2036\\model.safetensors = 98,292,360 bytes = 93.74 MiB（≈93.7 MiB ✓）\n2. 「24 層 / hidden 256」— ml\\exp3_accuracy\\runs\\M1_electra_small\\checkpoints\\checkpoint-2036\\config.json，`\"num_hidden_layers\": 24`、`\"hidden_size\": 256`、`\"embedding_size\": 256` ✓\n3. 「4 模型句子層級集成」— ml\\exp3_accuracy\\ensemble_sentence.json，`\"n_members\": 4`，成員為 B4_bin_best / B5_bin_bertwwm / B6_bin_electra / B7_bin_macbert；由 ml\\exp3_accuracy\\run_binary_push.py 可知 backbone 為 chinese-roberta-wwm-ext、chinese-bert-wwm、chinese-legal-electra-base-discriminator、chinese-macbert-base，皆為 base 尺寸（≈390 MiB）✓\n\n壓縮比應改為 3.84×，來源是本專案自己的 ONNX 匯出實測，而非「HuggingFace 實測 3.97×」：\n- C:\\Users\\User\\PycharmProjects\\機器學習\\手機應用\\model\\model_meta.json：`\"size_fp32_mb\": 94.2`、`\"size_int8_mb\": 24.55`、`\"compression_ratio\": 3.84`\n- 同值亦見於 手機應用\\notebook\\_figures_data.json（`\"compression_ratio\": 3.84`），計算式在 手機應用\\scripts\\export_onnx.py:84（`round(fp32_mb / int8_mb, 2)`）\n- 「3.97」在整個 repo（排除 .venv／node_modules）grep 不到任何一筆；HuggingFace Optimum 量化概念文件 https://huggingface.co/docs/optimum/en/concept_guides/quantization 實際 fetch 後也沒有 3.97× 這個數字（只提到 NF4 的「75% memory compression」即 4×）。\n\n改用正確的 3.84× 後的數字：4 × 390.2 MiB ÷ 3.84 ≈ 4 × 101.6 MB ≈ 406 MB（非 393 MB）；M2_rbt3 INT8 ≈ 38 MB（非 37 MB）；M1_electra_small INT8 ≈ 24.4 MB（24 MB 這個值恰好對，因為磁碟上實際的 手機應用\\model\\defamation_electra_small.int8.onnx = 25,741,091 bytes = 24.55 MiB）。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Android 上的安裝有兩種品質：有 Google Mobile Services 的裝置上 Chrome 會把 PWA 裝成 WebAPK（真正的 launcher 項目、可註冊 intent filter、出現在 Android 應用設定裡）；沒有 GMS 的裝置以及 Firefox/Edge/Opera 只會建立帶瀏覽器標記的主畫面捷徑。WebAPK 是由 Chrome 透過只有 Chrome 能呼叫的 Play Services API 向 Google 伺服器請求產生的（俗稱 WebAPK minting）。",
+      "source": "MDN, \"Making PWAs installable\"；web.dev, \"WebAPKs on Android\"",
+      "why": "兩個聲稱的來源都真實存在（非捏造），但引用有兩處實質瑕疵，故 claim_accurate=false。\n\n逐項查核（全部以 curl 抓原始 HTML 剝標籤後逐字比對，不靠摘要）：\n\n【成立】「有 GMS 的 Chrome 裝成 WebAPK（真 launcher 項目、出現在 Android 應用設定）；沒有 GMS 的裝置以及 Firefox/Edge/Opera 只建立帶瀏覽器標記的主畫面捷徑」\n→ MDN \"Making PWAs installable\" 幾乎逐字支持，連 \"browser-badged home-screen shortcut\" 與 Firefox/Edge/Opera 的列舉都吻合。\n\n【成立】「可註冊 intent filter」\n→ web.dev/articles/webapks 明確支持，並整節示範 intent-filter XML 與 scope 限制。\n\n【不成立 A：引錯頁面】「WebAPK 是向 Google 伺服器請求產生的（WebAPK minting）」\n→ 這個說法本身是對的，但被引的 https://web.dev/articles/webapks 全文完全沒有這段內容。我把該頁正文整段抓下來逐字檢查，grep 計數為：mint=0、Play Services=0、Google server=0、GMS=0、badged=0、Firefox/Edge/Opera=0。該頁只說 \"Chrome automatically generates an APK for you\"，完全沒有提到伺服器端產生、minting server、Play Services，也沒有任何瀏覽器比較。minting 的官方敘述實際在另一頁 web.dev/learn/pwa/installation#webapks（巧合的是 MDN 那句話的超連結正是指向這一頁）。\n\n【不成立 B：無來源支持的細節】「透過只有 Chrome 能呼叫的 Play Services API」\n→ 沒有任何官方文件說這個 API 只有 Chrome 能呼叫。web.dev 的 learn 頁把原因描述成「信任關係」而非「API 獨佔」：其他瀏覽器是因為 \"don't have minting servers they trust\" 才退回捷徑。Chromium 自家 README 更反向暗示並非架構上獨佔 — libs/client/ 被註明 \"Useful if another browser implemented WebAPKs\"，而把關機制是 Play Store（finsky）的套件/簽章檢查（開發版需用 GServices 旗標 finsky.webapk.do_webapk_install_package_check / do_webapk_install_signing_check 關掉），屬於信任把關，不是「只有 Chrome 能呼叫的 API」。\n\n【另外兩個小瑕疵】\n- 主張把高品質安裝路徑寫成只有「有 GMS 的 Chrome」，漏掉 MDN 與 web.dev 都並列的第二條路徑：Samsung 裝置上的 Samsung Internet 也會裝成真正的 WebAPK（走三星自己的 minting server，不經 Google 伺服器）。因此「沒有 GMS 的裝置就只有捷徑」在三星機上並不精確。\n- 「俗稱 WebAPK minting」低估了其地位：minting / minting server 是 Google 官方文件自己用的術語，不是民間俗稱。\n\n結論：主張的技術內容大致正確且可找到逐字佐證，但（a）minting 那半句不在所引 URL 上，（b）「只有 Chrome 能呼叫的 Play Services API」查無明確證據且與 Chromium 原始碼敘述相左。依「查不到明確證據時寧可標 false」的判準，標 claim_accurate=false 並附正確來源。",
+      "corrected": "主張的「兩種安裝品質」部分來源正確，但「WebAPK minting」部分引錯頁面，且有一個細節無來源支持。\n\n**正確存在、且逐字支持主張前半的來源：**\n1. MDN, \"Making PWAs installable\" — https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable （\"Browser support\" 一節，原文逐字）：\n   \"On Android, the only browsers that install PWAs as WebAPKs are: Chrome on devices with Google Mobile Services (GMS), and Samsung Internet on Samsung devices. This gives them a real entry in the app launcher and switcher, and in the system settings.\"\n   \"Firefox, Edge, Opera, and other browsers including Chrome on devices where GMS is not present, instead add a browser-badged home-screen shortcut that opens the site in the browser.\"\n2. web.dev, \"WebAPKs on Android\" — https://web.dev/articles/webapks （標題與 URL 皆正確存在，作者 Pete LePage）：\n   \"Being installed via an APK makes it possible for your app to show up in the app launcher, in Android's app settings and to register a set of intent filters.\"\n\n**minting 部分應改引的來源（原引用的 URL 查無此內容）：**\nweb.dev, \"Learn PWA > Installation\" — https://web.dev/learn/pwa/installation#webapks （原文逐字）：\n   \"A WebAPK is an Android package (APK) created by a trusted provider of the user's device, typically in the cloud, on a WebAPK minting server. This method is used by Google Chrome on devices with Google Mobile Services (GMS) installed, and by Samsung Internet browser, but only on Samsung-manufactured devices...\"\n   \"...the minting server 'mints' (packages) and signs an APK for the PWA... Because trusted providers (Play Services or Samsung) signed the APK, the phone installs it without disabling security...\"\n   \"Because Firefox, Microsoft Edge, Opera, Brave, and Samsung Internet (on non-Samsung devices) don't have minting servers they trust, they'll create shortcuts.\"\n旁證：Chromium 原始碼 chrome/android/webapk/README.md — https://chromium.googlesource.com/chromium/src/+/main/chrome/android/webapk/README.md：「shell_apk/ - Code for APK which is generated by the Chrome server」、「bypass the generation on the WebAPK server」。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Service Worker 的更新偵測機制：瀏覽器在使用者導覽到該 SW scope 內的頁面時會檢查更新，並以 byte-for-byte 比對（含 importScripts 取得的腳本）判斷是否有新版；開發者不需為 SW 腳本本身設定 HTTP cache 指示。",
+      "source": "Chrome for Developers / Workbox, \"The service worker lifecycle\"",
+      "why": "【來源存在性】確認存在。用 curl 直接抓取 https://developer.chrome.com/docs/workbox/service-worker-lifecycle/ 成功（HTTP 200、約 134 KB），屬 Chrome for Developers 的 Workbox 文件區。唯標題有出入：引用寫 \"The service worker lifecycle\"，頁面實際 <title> 是 \"A service worker's life\"（lifecycle 僅出現在 URL slug）。這屬標題引用不精確，不構成捏造，故 exists=true。\n\n【主張逐項比對】把頁面轉成純文字後定位到 \"Handling service worker updates\" 一節逐字核對：\n\n(1) 導覽觸發更新檢查 —— 相符。原文列出 \"Browsers will check for updates to a service worker when: The user navigates to a page within the service worker's scope.\"，並在後面重述 \"The browser automatically performs update checks when there's a navigation to a new page within a service worker's scope.\"\n\n(2) byte-for-byte 比對（含 importScripts）—— 大致相符但歸屬有偏差。原文：「Browsers detect changes in a couple of ways: Any byte-for-byte changes to scripts requested by importScripts, if applicable. Any changes in the service worker's top-level code, which affects the fingerprint the browser has generated of it.」頁面把 \"byte-for-byte\" 用在 importScripts 請求的腳本上，SW 腳本本身則說是 top-level code 的 fingerprint 變化；主張的寫法（「以 byte-for-byte 比對，含 importScripts 取得的腳本」）把主從關係寫反了，屬措辭不精確，但大方向尚可接受。\n\n(3) 「開發者不需為 SW 腳本本身設定 HTTP cache 指示」—— 與來源**直接相反**，這是判定 claim_accurate=false 的決定性依據。該頁緊接在變更偵測機制後明確寫道：「To ensure the browser has all it needs to reliably detect changes to a service worker's contents, don't tell the HTTP cache to hold onto it, and don't change its file name.」這是對開發者下達的作為義務（要確保 SW 腳本不被 HTTP cache 留存，實務上即設定 Cache-Control: no-cache / max-age=0），而非免除開發者設定快取指示的責任。主張可能是誤讀了前一句 \"The browser does a lot of heavy lifting here.\"，但該句是在形容瀏覽器承擔比對工作，下一句立刻把快取設定的責任交回開發者。\n\n【附帶說明】雖然就規範層面而言，自 2018 年起 SW 腳本的更新請求預設會繞過 HTTP cache（updateViaCache 預設值 'imports'，且 SW 腳本的 max-age 上限為 24 小時），因此「不必特別設 cache header」在某些情境下有其技術依據——但本次查核的任務是比對「主張 vs 這個被引用來源實際說了什麼」，而這份被引用的 Workbox 文件並未如此主張，反而給出相反的操作指示。按「查不到明確支持就不放過」的判準，第 3 項屬於對來源的錯誤歸屬，故 claim_accurate=false。\n\nSources:\n- [A service worker's life | Workbox | Chrome for Developers](https://developer.chrome.com/docs/workbox/service-worker-lifecycle/)",
+      "corrected": "來源真實存在：Chrome for Developers / Workbox，實際頁面標題為 \"A service worker's life\"（HTML <title> 為 \"A service worker's life | Workbox | Chrome for Developers\"），URL 正確無誤：https://developer.chrome.com/docs/workbox/service-worker-lifecycle/ （引用所寫的標題 \"The service worker lifecycle\" 與現行頁面標題不符，僅與 URL slug 相符，應更正為 \"A service worker's life\"）。\n\n該頁對 HTTP cache 的實際陳述應更正為（原文）：\n\"The browser does a lot of heavy lifting here. To ensure the browser has all it needs to reliably detect changes to a service worker's contents, don't tell the HTTP cache to hold onto it, and don't change its file name.\"\n\n即：文件明確要求開發者**不要讓 HTTP cache 快取住 SW 腳本**（亦即需確保 SW 腳本回應帶有不快取的指示、且不要更改檔名），而非「開發者不需為 SW 腳本設定 HTTP cache 指示」。\n\n另外，變更偵測的歸屬也應更正（原文）：\n\"Browsers detect changes in a couple of ways: Any byte-for-byte changes to scripts requested by importScripts, if applicable. Any changes in the service worker's top-level code, which affects the fingerprint the browser has generated of it.\"\n—— byte-for-byte 比對在該頁是針對 importScripts 取得的腳本而言；SW 本身則描述為瀏覽器對其 top-level code 產生的 fingerprint 變化。"
+    },
+    {
+      "topic": "主題四：PWA（漸進式網頁應用）與手機部署方案比較",
+      "claim": "Kiwi Browser（Android 上長期唯一支援 Chrome 桌面擴充套件的瀏覽器）已由作者宣布停止維護（2025 年 1 月後不再更新引擎），其擴充套件相關程式碼被併入 Microsoft Edge Canary for Android；Edge 的 Android 擴充功能目前仍僅存在於 Canary 通道，且可安裝清單為受限／策展狀態（Microsoft Q&A 答覆稱「Extension in Edge for Android is still on the initial phase」）。",
+      "source": "多家科技媒體報導（neowin、alternativeto、reclaimthenet）轉述作者 Arnaud Granal 公告；Microsoft Q&A on learn.microsoft.com。未能在 Microsoft 官方部落格找到正式的 Android 擴充功能發布公告",
+      "why": "【來源存在性：確認存在】\n\n1. 引用的 URL 真實存在且內容吻合。實際 fetch https://learn.microsoft.com/en-us/answers/questions/5605262/how-can-i-get-my-extension-approved-to-show-up-in：\n   - 標題：「How can I get my extension approved to show up in Microsoft Edge for Android?」\n   - 提問者 \"Jai\"，2025-11-01 10:52；回覆者 paulr0511，2025-11-01 11:27。\n   - 引用的原文逐字存在：「Extension in Edge for Android is still on the initial phase and there will be more extensions that will be available soon and you will need to ensure to submit yours and hopefully it will be available soon once it has been published.」→ 逐字正確，非捏造。\n\n2. Kiwi Browser 停止維護一事，有比媒體更強的一手來源證實。透過 GitHub API 取得 kiwibrowser/src.next 的 README 原文：\n   - 「Important note: Kiwi Browser is now archived. It will no longer be maintained after January 2025.」\n   - 「The extensions code for Kiwi Browser also has been integrated into the development version of Microsoft Edge: Microsoft Edge Canary.」\n   - 署名 \"Arnaud\"（即 Arnaud Granal），並附 Edge Canary 透過 Developer Options「Extension install by id」安裝擴充套件的步驟。\n   → 「2025 年 1 月後不再更新」與「擴充套件程式碼併入 Edge Canary」兩點，一手來源完全支持。\n\n3. 「未能在 Microsoft 官方部落格找到正式的 Android 擴充功能發布公告」也成立：官方 Edge extensions 總覽文件（learn.microsoft.com/en-us/microsoft-edge/extensions/，updated 2026-09-02）全文未提 Android/mobile 擴充功能；/extensions/android/、/extensions/developer-guide/android、/extensions/publish/android 皆回傳 404。\n\n【主張不符之處：claim_accurate=false】\n\n關鍵錯誤是「Edge 的 Android 擴充功能目前仍僅存在於 Canary 通道」。此句以今天（2026-10-04）為準已經過時／錯誤：\n\n- 官方政策文件 ExtensionInstallForcelist（learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/extensioninstallforcelist）明載「Supported versions — Windows: ≥ 77, macOS: ≥ 77, **Android: ≥ 149**, iOS: ≥ 149」。\n- 官方政策文件 ExtensionSettings 明載「**Android: ≥ 135**」。\n- 而 Edge Mobile **Stable** Channel 發行說明（microsoft-edge-relnote-mobile-stable-channel）目前最新為 **154.0.4258.38 (Android)，2026-09-29**；其 148.50（2026-07-06）條目即寫「[iOS & Android] Support New Policy of ExtensionInstallForcelist which allows to specify a list of extensions that install silently」。\n→ Android 149/135 遠低於現行 stable 154，亦即擴充功能在 Edge for Android 的 **stable 通道**已有官方文件與企業政策支援，並非「僅存在於 Canary」。\n\n- 另外，連 Canary-only 的歷史敘述也不精確：Edge Mobile Stable 發行說明 122.0.2365.76 (Android)，2024-03-07 就已記載「Extensions in Edge for Android can be disabled by MAM policy…Note: The Extensions feature is still in flight. It can be turned on by the Android Extension flag from Edge://flags.」——早在 Kiwi 遷移（2024-12／2025-01）之前，stable 版就有 flag 控制的擴充功能，而非 Canary 專屬。\n\n次要瑕疵（不是判定 false 的主因，但撰稿時應修正）：\n\n- 來源權威性被高估。該 Q&A 回覆者 paulr0511 的身分是「Independent Advisor」（微軟社群志願顧問），不是微軟員工，答覆亦無官方背書。寫成「Microsoft Q&A 答覆稱」容易被讀成微軟官方立場，應改述為「Microsoft Q&A 上社群顧問的答覆」。該句僅能支持「官方清單仍有限、仍在早期階段」的語氣，不能作為通道可用性的權威依據。\n- 「Android 上長期唯一支援 Chrome 桌面擴充套件的瀏覽器」說法過強。Yandex Browser for Android 同樣支援 Chrome 擴充套件，且 Kiwi 的衍生分支（Mises、Lemur 等）亦提供同能力，宜改為「最知名／最廣泛使用的」。\n- 「可安裝清單為受限／策展狀態」只對官方 Extensions Hub 成立；Kiwi README 自己記載的路徑是開啟 Developer Options 後用「Extension install by id」貼上 Edge Add-ons 商店任一擴充套件 ID 安裝，並非只能從策展清單挑選，兩者應分開陳述。\n\n查核限制說明：本 session 的 WebSearch 配額已用盡（200/200），neowin 文章回 403、alternativeto 與 reclaimthenet 的推測 URL 回 404，因此無法逐一核實那三家媒體報導的存在與措辭。但 Kiwi 停更與併入 Edge Canary 已由作者自己的 repo README 直接證實，屬更強的一手證據，故該部分不因媒體無法取用而判為不存在。",
+      "corrected": "引用的 URL 本身有效、逐字引述正確，但需補正來源身分並刪除／改寫「僅存在於 Canary」一句。建議改用下列來源組合：\n\n1.（Kiwi 停更＋併入 Edge Canary，一手來源，取代媒體轉述）\n   kiwibrowser/src.next README — https://github.com/kiwibrowser/src.next\n   原文：「Important note: Kiwi Browser is now archived. It will no longer be maintained after January 2025.」／「The extensions code for Kiwi Browser also has been integrated into the development version of Microsoft Edge: Microsoft Edge Canary.」（署名 Arnaud）\n\n2.（Android 擴充功能已進入 stable 通道，推翻「僅限 Canary」）\n   ExtensionInstallForcelist 政策文件 — https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/extensioninstallforcelist\n   原文：「Supported versions — Windows: ≥ 77  macOS: ≥ 77  Android: ≥ 149  iOS: ≥ 149」\n   ExtensionSettings 政策文件 — https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/extensionsettings\n   原文：「Android: ≥ 135」\n\n3.（現行 stable 版本號，用以說明 149/135 早已進入 stable）\n   Edge Mobile Stable Channel 發行說明 — https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnote-mobile-stable-channel\n   最新：「Version 154.0.4258.38 (Android): September 29, 2026」；148.50（2026-07-06）：「[iOS & Android] Support New Policy of ExtensionInstallForcelist…」\n\n4.（最早的 Android 擴充功能 flag 記載，非 Canary 專屬）\n   Edge Mobile Stable 發行說明封存 — https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnote-archive-mobile-stable-channel\n   「Version 122.0.2365.76 (Android): March 7, 2024 … Extensions in Edge for Android can be disabled by MAM policy … Note: The Extensions feature is still in flight. It can be turned on by the Android Extension flag from Edge://flags.」\n\n5.（原引用保留，但須標明為社群答覆而非官方）\n   https://learn.microsoft.com/en-us/answers/questions/5605262/how-can-i-get-my-extension-approved-to-show-up-in\n   —「Microsoft Q&A 上 Independent Advisor（社群顧問）paulr0511 於 2025-11-01 的答覆」，僅用於支持「官方可安裝清單仍有限、處於早期階段」。\n\n媒體轉述（neowin／alternativeto／reclaimthenet）本次無法取用驗證，建議直接改引第 1 項一手來源，不再依賴媒體轉述。"
+    },
+    {
+      "topic": "主題五：將法律判斷自動化的倫理與法律風險（台灣刑法309/310、UPL、EU AI Act、免責聲明實務、選擇偏誤）",
+      "claim": "公然侮辱與誹謗在我國實務上的通行區別為：第309條之「侮辱」係以言語、文字、動作等對人表示輕蔑、辱罵之意，屬無從檢驗真偽的「抽象謾罵」或價值判斷；第310條之「誹謗」則須「具體指摘或傳述足以毀損他人名譽之事」，即該陳述現實上有存在可能、可檢驗是否與事實相符。純粹意見表達因無真偽問題，對可受公評之事項縱用尖酸刻薄文字批評，仍受言論自由保障。",
+      "source": "法律百科（legis-pedia）等法律資訊網站整理之實務見解；條文基礎見刑法第309、310條（未取得單一最高法院判例字號作為權威出處）",
+      "why": "【查核方式】WebSearch 配額已用盡（200/200），故改以 WebFetch + curl 直接抓取原始 HTML、meta 標籤與網站 sitemap 驗證。\n\n【1. 來源是否存在：存在，但 URL 錯誤】\n- 直接抓 https://www.legis-pedia.com/QA/976：HTTP 200、58,271 bytes，但 og:title 為「問答｜法律百科 Legispedia」、og:url 指向網站首頁，正文只有 14 個問答分類清單（法律入門 151、刑事犯罪 480…）。全文 grep「侮辱」= 0 次、「誹謗」= 0 次。這是 soft-404，不是引用所稱的那一頁。\n- 比對 sitemap（/sitemap.xml → /sitemap/qa-1.xml、qa-2.xml、qa-3.xml，共 2,500 筆）：法律百科問答路徑格式為 /QA/question/<id>，不存在 /QA/976，但存在 /QA/question/976。\n- 抓取 /QA/question/976：確為「若講朋友的壞話，是否構成公然侮辱罪？」，分類在「刑事犯罪／妨害名譽」，描述即「若壞話內容為：＂王曉明是笨蛋＂、＂王曉明劈腿＂等，如何定義此話是事實或者公然侮辱？」，由認證法律人王琮儀於 2021-10-22 回答。主題與引用所述完全吻合，故判定來源真實存在、僅 URL 寫錯（ID 976 正確）。\n\n【2. 主張是否與來源相符：前兩段符合，第三段不符】\n符合的部分（頁內原文）：\n- 309：「公然侮辱罪，是要在多數人或是不特定人有可能看見或聽見侮辱的情形下，對別人進行不涉及敘述事實的言語謾罵，或用動作、文字圖畫表達謾罵的意思，而且可能貶低被侮辱者的人格與社會評價」→ 支持「以言語、文字、動作表示輕蔑辱罵」「不涉及事實／無從檢驗真偽」。\n- 310：「如果具體的評論可以判斷真假的事情，而有攻擊私德、貶低人格的言論，則可能會涉及到誹謗罪，例如不實指責他人婚外情、論文抄襲、貪污圖利等等。所以問題中問到的『事實』評論，其實會涉及到誹謗罪而不是公然侮辱罪。」＋註腳引刑法第310條第1項全文「指摘或傳述足以毀損他人名譽之事」→ 支持「須具體指摘或傳述、可檢驗真偽」。\n- 頁面亦以「笨蛋」（→309，舉彰化地院109年度易字第266號等多則判決）對比「劈腿」（→310，舉臺灣高等法院110年度上易字第903號），正是主張的區別邏輯。\n\n不符／無支持的部分：\n- 第三句「純粹意見表達因無真偽問題，對可受公評之事項縱用尖酸刻薄文字批評，仍受言論自由保障」完全不在該頁。全文 grep：「可受公評」0、「意見表達」0、「價值判斷」0、「尖酸」0、「合理評論」0、「言論自由」0、「刑法311」0。該頁僅附帶一句「除非另涉及公眾人物操守的問題」（指私德／公共利益），不足以支撐言論自由保障的命題。\n- 延伸查核該頁所連結的兩篇法律百科文章（/article/crime-penalty/785、/article/crime-penalty/139）亦同樣查無「可受公評」「意見表達」「尖酸」「合理評論」「價值判斷」；785 甚至寫「對於已經侵害私人名譽、信用及人格的言論，不受到言論自由保障」，與主張的保障論述方向不同（雖不矛盾，但並未表述該命題）。該命題屬釋字第509號／刑法第311條第3款／憲法法庭112年憲判字第8號、113年憲判字第3號的範疇，需另行引註。\n\n【3. 其他應注意的時效問題】\n- 被引頁面的回答成文於 2021-10-22，早於憲法法庭 113年憲判字第3號（2024-04-26）對公然侮辱罪的合憲性限縮（須為「恣意謾罵」、造成名譽權實質損害，並須與言論自由權衡）。以該頁作為「現行通行實務區別」的唯一依據，在 309 側的描述偏舊。\n- 網站本身另載明「法律百科於2026年5月1日起，停止更新。請讀者留意網站內容及援引資料，是否與現行法令規定相符。」引用時宜加註此一時效警語。\n\n【結論】exists=true（ID 與主題吻合，但 URL 必須修正為 /QA/question/976，原 URL 為導覽頁、不含任何相關內容）；claim_accurate=false——核心的 309/310 區別確有來源支持且引述準確，但主張中「意見表達／可受公評之事／尖酸刻薄批評受言論自由保障」這一獨立命題在所引來源中完全查無依據，且主張自稱「未取得最高法院判例字號」亦與事實不符（法律百科同站即引有最高法院107年度台上字第3116號）。依「查不到明確證據寧可標 false」的判準，標為不相符並附修正。",
+      "corrected": "來源實際存在，但引用的 URL 是錯的。\n\n正確 URL：https://www.legis-pedia.com/QA/question/976\n（標題：「若講朋友的壞話，是否構成公然侮辱罪？」；提問者 LU0002117，2019-11-19；回覆者 王琮儀（認證法律人），2021-10-22；分類：所有問答／刑事犯罪／妨害名譽）\n\n原引用的 https://www.legis-pedia.com/QA/976 不是有效的問答路徑：實測回傳 HTTP 200，但內容是「問答｜法律百科 Legispedia」的分類導覽頁（og:title=「問答｜法律百科 Legispedia」、og:url=網站首頁），整頁 HTML 中「侮辱」「誹謗」出現次數皆為 0（屬 soft-404）。經 https://www.legis-pedia.com/sitemap/qa-1~3.xml（共 2,500 筆）確認，法律百科問答的 URL 格式一律為 /QA/question/<id>，sitemap 中無 /QA/976，但有 /QA/question/976。\n\n主張第三句（純粹意見表達／可受公評之事／尖酸刻薄批評仍受言論自由保障）請改引下列來源，該節內容不在上述問答頁：\n- 司法院釋字第509號解釋（真實惡意／合理查證）、刑法第311條第3款「對於可受公評之事，而為適當之評論」\n- 憲法法庭112年憲判字第8號判決（誹謗罪合憲性限縮）、113年憲判字第3號判決（公然侮辱罪限縮為「恣意謾罵」並須權衡言論自由）\n\n若需要權威的最高法院出處（原引用自稱未取得），法律百科自己就有引：最高法院107年度台上字第3116號刑事判決——「刑法第309條所稱『侮辱』者，係以言語、舉動或其他方式，對人為抽象的、籠統性侮弄辱罵而言，至同法第310條稱『誹謗』者，則係以具體指摘或傳述足以毀壞他人名譽之事而言，二者應有所分別。」見 https://www.legis-pedia.com/article/crime-penalty/785 （姚書容，《網路上留言或拍攝影片，表達對商品或服務的使用心得，是否會構成刑法妨害名譽罪？》）註腳5；同文註腳4另引臺灣高等法院99年度上易字第2381號刑事判決（侮辱＝輕蔑表示、抽象謾罵）。（註：此二判決字號係法律百科註腳所載，本次未另行至裁判書系統逐一核對原文。）"
+    }
+  ],
+  "uncertain": [
+    {
+      "topic": "法律領域 NLP 與罪名預測（Legal Judgment Prediction, LJP）文獻回顧",
+      "finding": {
+        "claim": "CAIL2019 的「要素識別」（element recognition）任務是逐句判斷案件關鍵要素的多標籤分類，涵蓋婚姻（離婚）、勞動、借貸三類民事糾紛，要求判定相關要素是否成立。這與 CAIL2018 的整案結果預測是不同粒度的任務設定。另有後續的 LEEC 資料集（Legal Element Extraction Dataset，具大規模領域專屬標籤體系，IJCAI 2024 / arXiv:2310.01271）延續此方向。",
+        "source": "CAIL2019 要素識別賽道（相關描述見 arXiv:2004.12158 Zhong et al. 2020 survey 與 arXiv:2310.01271 LEEC）；賽道規格未取得官方原始文件逐字核對",
+        "url": "https://arxiv.org/abs/2310.01271",
+        "relevance": "為本專案「句子層級標註」提供領域內的正當性先例：中文法律 NLP 早在 2019 年就承認整案層級標籤不夠細，而把任務下推到逐句要素判定。本專案把一則貼文/留言當一列資料，等於是同一條思路在刑事妨害名譽上的應用，報告中可引此說明這不是權宜之計而是方法論升級。但 CAIL2019 賽道的確切規格我只透過二手文獻確認，引用時建議改以 LEEC 這篇可查證的論文為主。",
+        "confidence": "uncertain"
+      }
+    },
+    {
+      "topic": "主題三：裝置端（on-device）推論與模型壓縮技術 — ONNX Runtime Web、量化、蒸餾小模型、手機瀏覽器實務限制、transformers.js",
+      "finding": {
+        "claim": "官方文件沒有給出「手機瀏覽器可接受的模型檔案大小上限」的具體 MB 數字。網路上流傳的 iOS Safari「300–500 MB WebGL heap 上限」、「384 MB 以下較穩定」、「資產總量控制在 50–100 MB」等數字，我無法在 Apple/WebKit 官方文件找到對應出處，來源多為 Unity WebGL 社群論壇與第三方部落格。",
+        "source": "未能查證（搜尋到的數字均來自 Unity 論壇、第三方部落格，非 Apple/WebKit 官方文件）",
+        "relevance": "報告寫「模型應控制在 X MB 以內」時，必須標成「本專案的工程目標」而非引用文獻。可行的誠實寫法：以 4G 行動網路約 10 Mbps 推算，50 MB 約需 40 秒、12 MB 約需 10 秒，並說明這是自行推算。若要真數字，建議在目標機型上實測 onnxruntime-web 的記憶體佔用與載入時間，寫進報告的實驗章節。",
+        "confidence": "uncertain"
+      }
+    }
+  ],
+  "counts": {
+    "total": 140,
+    "verified": 129,
+    "rejected": 9,
+    "uncertain": 2
+  }
+}

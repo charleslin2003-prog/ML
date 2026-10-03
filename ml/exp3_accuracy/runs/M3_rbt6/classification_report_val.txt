@@ -1,0 +1,11 @@
+M3_rbt6 / hfl/rbt6 / val (3326 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.7876    0.6560    0.7158      1622
+         誹謗類     0.7175    0.8316    0.7703      1704
+
+    accuracy                         0.7459      3326
+   macro avg     0.7525    0.7438    0.7430      3326
+weighted avg     0.7517    0.7459    0.7437      3326
+

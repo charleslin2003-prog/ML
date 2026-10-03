@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>妨害名譽風險判讀器</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="stylesheet" href="./styles.css">
+<!-- 自行託管而非用 CDN：跨來源的 no-cors 請求會得到 opaque response（status 0、body null），
+     Service Worker 的 resp.ok 判斷永遠為 false，根本快取不進去，離線時引擎就載不起來。
+     同源回應沒有這個問題，也不會被配額加計 ~7MB 的 padding。 -->
+<script src="./vendor/ort.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>妨害名譽風險判讀器</h1>
+    <p>比對一則言論的用語，較接近過往<strong>公然侮辱</strong>或<strong>誹謗</strong>案件　·　完全在你的裝置上運算</p>
+  </header>
+
+  <div class="card disclaimer">
+    <strong>⚠ 這不是法律意見，也不能判斷你會不會被告</strong><br>
+    本工具不是律師事務所、不成立委任關係、不提供法律結論，也<strong>不就你的具體情況適用法律</strong>。
+    它做的只是「文字用語與過往判決案例的相似度比對」，準確率約 74%
+    （<strong>每四則就有一則是錯的</strong>）。
+    <br><br>
+    更根本的限制：憲法法庭 <strong>113年憲判字第3號</strong>（2024）要求公然侮辱須依
+    <strong>個案表意脈絡</strong>權衡；<strong>112年憲判字第8號</strong>（2023）要求誹謗須審查
+    發言前是否<strong>經合理查證</strong>。這些要件都不在留言文字裡，
+    任何只讀文字的模型在原理上都無法複製現行法律判準。遇到實際法律問題請諮詢律師。
+  </div>
+
+  <div class="card" id="loading">
+    <div id="loadText">準備載入模型…</div>
+    <div class="bar"><div id="loadBar" style="width:0%"></div></div>
+    <div class="note" id="loadNote">首次使用需下載模型，之後會快取在裝置上，離線也能用。</div>
+  </div>
+
+  <div class="card" id="main" hidden>
+    <label for="text"><strong>輸入要判讀的言論</strong></label>
+    <textarea id="text" placeholder="例如：你這個智障，整天只會造謠" maxlength="500"></textarea>
+    <div class="counter"><span id="count">0</span> / 500 字</div>
+    <button id="go" disabled>判讀</button>
+    <div class="examples" id="examples"></div>
+  </div>
+
+  <div class="card" id="result" hidden></div>
+
+  <div class="card" id="about">
+    <details>
+      <summary>這個模型是怎麼來的？它的限制是什麼？</summary>
+      <p style="font-size:.84rem">
+        訓練資料來自台灣司法院判決書查詢系統的「妨害名譽」刑事判決，
+        共 36,173 份判決、整理出 63,044 則言論。模型學的是
+        <strong>「法院把這類言論判成哪一種罪」</strong>的統計規律。
+      </p>
+      <table>
+        <tr><th>項目</th><th>說明</th></tr>
+        <tr><td>任務</td><td>二分類：用語較接近公然侮辱（刑法309）或誹謗類（刑法310）的過往案例</td></tr>
+        <tr><td>測試集表現</td><td id="aboutAcc">載入中</td></tr>
+        <tr><td>模型</td><td id="aboutModel">載入中</td></tr>
+        <tr><td>推論位置</td><td>你的裝置（文字不上傳任何伺服器）</td></tr>
+        <tr><td>訓練資料時點</td><td>司法院判決書，爬取至 2026-09</td></tr>
+      </table>
+      <p class="note warn">
+        <strong>限制一　選擇偏誤：</strong>訓練資料全部來自「已被起訴並判決」的案件。
+        台灣 2014–2016 年妨害名譽案件偵查終結 28,073 件，僅約 20.5% 起訴 ——
+        也就是說，判決書只涵蓋約兩成案件，而這兩成又是「調解失敗、雙方堅持到底」的極端情況。
+        模型學到的其實是「已起訴且判決的條件下，罪名是什麼」，不是「這句話會不會被告」。
+        把一句無害的話丟進去，它仍會輸出一個罪名與高信心度 —— 那不代表那句話有問題。
+      </p>
+      <p class="note warn">
+        <strong>限制二　法律會變：</strong>113年憲判字第3號（2024-04-26）限縮了公然侮辱罪的範圍，
+        113年憲判字第5號讓「侮辱職務罪」失效。本模型的訓練資料橫跨這些時點，
+        標籤反映的是<strong>歷史判決實務</strong>，未必符合現行法。
+      </p>
+      <p class="note warn">
+        <strong>限制三　任務本質是多標籤：</strong>同一則貼文可以同時構成公然侮辱與誹謗
+        （在逐句標註的高品質資料中佔 25%），但本工具只輸出單一結果。
+      </p>
+    </details>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+M1_electra_small / hfl/chinese-electra-180g-small-ex-discriminator / val (3326 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.7729    0.6400    0.7002      1622
+         誹謗類     0.7055    0.8210    0.7589      1704
+
+    accuracy                         0.7327      3326
+   macro avg     0.7392    0.7305    0.7295      3326
+weighted avg     0.7384    0.7327    0.7302      3326
+

@@ -1,0 +1,83 @@
+{
+  "run_name": "B6_bin_electra",
+  "data_dir": "data_bin_v3_source",
+  "model_id": "hfl/chinese-legal-electra-base-discriminator",
+  "epochs": 6,
+  "batch_size": 32,
+  "learning_rate": 5e-05,
+  "class_weight": true,
+  "class_weights_used": [
+    0.9940709046454768,
+    1.0060002474328837
+  ],
+  "early_stopping": true,
+  "n_train": 16263,
+  "n_val": 3326,
+  "labels": [
+    "公然侮辱",
+    "誹謗類"
+  ],
+  "total_wall_clock_seconds": 2674.6,
+  "train_runtime_seconds": 2671.3,
+  "peak_gpu_memory_allocated_mb": 4623.1,
+  "main_test": {
+    "n": 3065,
+    "accuracy": 0.7543230016313214,
+    "macro_f1": 0.7460254735477796,
+    "weighted_f1": 0.7509830219153831,
+    "per_class_f1": {
+      "公然侮辱": 0.7001194743130227,
+      "誹謗類": 0.7919314727825366
+    },
+    "confusion_matrix": [
+      [
+        879,
+        488
+      ],
+      [
+        265,
+        1433
+      ]
+    ]
+  },
+  "val_eval": {
+    "n": 3326,
+    "accuracy": 0.7423331328923632,
+    "macro_f1": 0.740205392522108,
+    "weighted_f1": 0.7407850427226427,
+    "per_class_f1": {
+      "公然侮辱": 0.716694214876033,
+      "誹謗類": 0.7637165701681831
+    },
+    "confusion_matrix": [
+      [
+        1084,
+        538
+      ],
+      [
+        319,
+        1385
+      ]
+    ]
+  },
+  "clean_test": {
+    "n": 1822,
+    "accuracy": 0.7508232711306256,
+    "macro_f1": 0.7325706053587524,
+    "weighted_f1": 0.7463751424971439,
+    "per_class_f1": {
+      "公然侮辱": 0.662704309063893,
+      "誹謗類": 0.8024369016536118
+    },
+    "confusion_matrix": [
+      [
+        446,
+        285
+      ],
+      [
+        169,
+        922
+      ]
+    ]
+  }
+}

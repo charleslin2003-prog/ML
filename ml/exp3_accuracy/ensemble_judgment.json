@@ -1,0 +1,33 @@
+{
+  "members": {
+    "J0_judgment": {
+      "accuracy": 0.8489702517162472,
+      "macro_f1": 0.8482551073557497,
+      "threshold": 0.3100000000000001,
+      "accuracy_tuned": 0.8478260869565217,
+      "macro_f1_tuned": 0.847421608687263
+    },
+    "J1_bertwwm": {
+      "accuracy": 0.8260869565217391,
+      "macro_f1": 0.8260787599497277,
+      "threshold": 0.5200000000000002,
+      "accuracy_tuned": 0.8272311212814645,
+      "macro_f1_tuned": 0.8271928894196334
+    },
+    "J2_electra": {
+      "accuracy": 0.8421052631578947,
+      "macro_f1": 0.8415443552836941,
+      "threshold": 0.4400000000000002,
+      "accuracy_tuned": 0.8398169336384439,
+      "macro_f1_tuned": 0.8394099272908628
+    }
+  },
+  "ensemble": {
+    "n_members": 3,
+    "accuracy": 0.8558352402745996,
+    "macro_f1": 0.8553990955549837,
+    "threshold": 0.5900000000000003,
+    "accuracy_tuned": 0.8501144164759725,
+    "macro_f1_tuned": 0.8492283907941537
+  }
+}

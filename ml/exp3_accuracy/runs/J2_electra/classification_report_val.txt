@@ -1,0 +1,11 @@
+J2_electra / hfl/chinese-legal-electra-base-discriminator / val (859 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.8826    0.8602    0.8712       472
+         誹謗類     0.8346    0.8605    0.8473       387
+
+    accuracy                         0.8603       859
+   macro avg     0.8586    0.8603    0.8593       859
+weighted avg     0.8610    0.8603    0.8605       859
+

@@ -1,0 +1,77 @@
+{
+  "run_name": "E7_more_len4",
+  "data_dir": "data_v4_more_len4",
+  "model_id": "hfl/chinese-roberta-wwm-ext",
+  "epochs": 3,
+  "batch_size": 32,
+  "learning_rate": 2e-05,
+  "class_weight": false,
+  "class_weights_used": null,
+  "early_stopping": false,
+  "n_train": 20945,
+  "n_val": 4570,
+  "labels": [
+    "公然侮辱",
+    "誹謗類",
+    "無罪"
+  ],
+  "total_wall_clock_seconds": 451.8,
+  "train_runtime_seconds": 448.0,
+  "peak_gpu_memory_allocated_mb": 4615.3,
+  "main_test": {
+    "n": 4314,
+    "accuracy": 0.5514603616133519,
+    "macro_f1": 0.5254691465222873,
+    "weighted_f1": 0.538504289444358,
+    "per_class_f1": {
+      "公然侮辱": 0.5194054500412882,
+      "誹謗類": 0.6523046092184369,
+      "無罪": 0.4046973803071364
+    },
+    "confusion_matrix": [
+      [
+        629,
+        447,
+        291
+      ],
+      [
+        170,
+        1302,
+        226
+      ],
+      [
+        256,
+        545,
+        448
+      ]
+    ]
+  },
+  "clean_test": {
+    "n": 2528,
+    "accuracy": 0.5561708860759493,
+    "macro_f1": 0.5132156004158287,
+    "weighted_f1": 0.5378886676722815,
+    "per_class_f1": {
+      "公然侮辱": 0.4610336341263331,
+      "誹謗類": 0.678613167121153,
+      "無罪": 0.4
+    },
+    "confusion_matrix": [
+      [
+        281,
+        283,
+        167
+      ],
+      [
+        77,
+        871,
+        143
+      ],
+      [
+        130,
+        322,
+        254
+      ]
+    ]
+  }
+}

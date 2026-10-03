@@ -1,0 +1,12 @@
+E0_baseline / hfl/chinese-roberta-wwm-ext / main (4314 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.5727    0.5333    0.5523      1367
+         誹謗類     0.5897    0.6873    0.6348      1698
+          無罪     0.4162    0.3539    0.3825      1249
+
+    accuracy                         0.5420      4314
+   macro avg     0.5262    0.5248    0.5232      4314
+weighted avg     0.5341    0.5420    0.5356      4314
+

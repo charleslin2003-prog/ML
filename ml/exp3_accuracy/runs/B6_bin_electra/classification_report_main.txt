@@ -1,0 +1,11 @@
+B6_bin_electra / hfl/chinese-legal-electra-base-discriminator / main (3065 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.7684    0.6430    0.7001      1367
+         誹謗類     0.7460    0.8439    0.7919      1698
+
+    accuracy                         0.7543      3065
+   macro avg     0.7572    0.7435    0.7460      3065
+weighted avg     0.7560    0.7543    0.7510      3065
+

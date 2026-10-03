@@ -1,0 +1,40 @@
+{
+  "members": {
+    "B4_bin_best": {
+      "accuracy": 0.7402936378466558,
+      "macro_f1": 0.7347525151185434,
+      "threshold": 0.4200000000000002,
+      "accuracy_tuned": 0.7412724306688417,
+      "macro_f1_tuned": 0.7296308932115751
+    },
+    "B5_bin_bertwwm": {
+      "accuracy": 0.7435562805872757,
+      "macro_f1": 0.7418248667055898,
+      "threshold": 0.2800000000000001,
+      "accuracy_tuned": 0.7484502446982055,
+      "macro_f1_tuned": 0.7382868579770836
+    },
+    "B6_bin_electra": {
+      "accuracy": 0.7543230016313214,
+      "macro_f1": 0.7460254735477796,
+      "threshold": 0.5500000000000003,
+      "accuracy_tuned": 0.7520391517128875,
+      "macro_f1_tuned": 0.746650575740754
+    },
+    "B7_bin_macbert": {
+      "accuracy": 0.731484502446982,
+      "macro_f1": 0.7306559035591397,
+      "threshold": 0.2900000000000001,
+      "accuracy_tuned": 0.7477977161500816,
+      "macro_f1_tuned": 0.7394064382721651
+    }
+  },
+  "ensemble": {
+    "n_members": 4,
+    "accuracy": 0.7615008156606852,
+    "macro_f1": 0.7584222517871297,
+    "threshold": 0.5200000000000002,
+    "accuracy_tuned": 0.7582381729200652,
+    "macro_f1_tuned": 0.7557719288454335
+  }
+}

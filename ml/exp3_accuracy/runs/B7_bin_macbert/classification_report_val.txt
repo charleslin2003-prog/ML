@@ -1,0 +1,11 @@
+B7_bin_macbert / hfl/chinese-macbert-base / val (3326 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.7086    0.7707    0.7383      1622
+         誹謗類     0.7618    0.6984    0.7287      1704
+
+    accuracy                         0.7336      3326
+   macro avg     0.7352    0.7345    0.7335      3326
+weighted avg     0.7359    0.7336    0.7334      3326
+

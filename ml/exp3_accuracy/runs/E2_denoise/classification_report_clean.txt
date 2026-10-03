@@ -1,0 +1,12 @@
+E2_denoise / hfl/chinese-roberta-wwm-ext / clean (2528 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.5131    0.5349    0.5238       731
+         誹謗類     0.6171    0.6957    0.6540      1091
+          無罪     0.4235    0.3215    0.3655       706
+
+    accuracy                         0.5447      2528
+   macro avg     0.5179    0.5174    0.5144      2528
+weighted avg     0.5330    0.5447    0.5358      2528
+

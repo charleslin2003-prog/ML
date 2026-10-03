@@ -1,0 +1,63 @@
+{
+  "run_name": "J2_electra",
+  "data_dir": "data_judgment",
+  "model_id": "hfl/chinese-legal-electra-base-discriminator",
+  "epochs": 6,
+  "batch_size": 16,
+  "learning_rate": 5e-05,
+  "class_weight": true,
+  "class_weights_used": [
+    0.7996579847408577,
+    1.3342844600526778
+  ],
+  "early_stopping": true,
+  "n_train": 6079,
+  "n_val": 859,
+  "labels": [
+    "公然侮辱",
+    "誹謗類"
+  ],
+  "total_wall_clock_seconds": 533.1,
+  "train_runtime_seconds": 530.0,
+  "peak_gpu_memory_allocated_mb": 4679.5,
+  "main_test": {
+    "n": 874,
+    "accuracy": 0.8421052631578947,
+    "macro_f1": 0.8415443552836941,
+    "weighted_f1": 0.8421699832972256,
+    "per_class_f1": {
+      "公然侮辱": 0.8509719222462203,
+      "誹謗類": 0.8321167883211679
+    },
+    "confusion_matrix": [
+      [
+        394,
+        72
+      ],
+      [
+        66,
+        342
+      ]
+    ]
+  },
+  "val_eval": {
+    "n": 859,
+    "accuracy": 0.860302677532014,
+    "macro_f1": 0.859286439733971,
+    "weighted_f1": 0.8604697303207333,
+    "per_class_f1": {
+      "公然侮辱": 0.871244635193133,
+      "誹謗類": 0.8473282442748091
+    },
+    "confusion_matrix": [
+      [
+        406,
+        66
+      ],
+      [
+        54,
+        333
+      ]
+    ]
+  }
+}

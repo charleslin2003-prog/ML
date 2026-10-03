@@ -1,0 +1,11 @@
+B5_bin_bertwwm / hfl/chinese-bert-wwm / clean (1822 筆)
+
+              precision    recall  f1-score   support
+
+        公然侮辱     0.6692    0.7114    0.6897       731
+         誹謗類     0.7981    0.7644    0.7809      1091
+
+    accuracy                         0.7431      1822
+   macro avg     0.7337    0.7379    0.7353      1822
+weighted avg     0.7464    0.7431    0.7443      1822
+
